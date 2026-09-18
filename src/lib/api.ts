@@ -3,7 +3,7 @@ import { auth } from "./auth";
 const API_BASE = import.meta.env.VITE_API_URL || "/api";
 
 function getUserId(): string {
-  const user = auth.currentUser;
+  const user = auth?.currentUser;
   if (user) return user.uid;
 
   let devId = localStorage.getItem("bugpilot-dev-user-id");
@@ -94,6 +94,35 @@ export interface Bug {
   isPublic: boolean;
   createdAt: string;
   updatedAt: string;
+  resolvedAt?: string | null;
+}
+
+export interface InsightsFilters {
+  dateRange?: "7" | "30" | "all";
+  status?: string;
+  severity?: string;
+  bugType?: string;
+}
+
+export interface InsightSeriesItem {
+  label?: string;
+  date?: string;
+  count: number;
+}
+
+export interface Insights {
+  totalBugs: number;
+  openBugs: number;
+  inProgressBugs: number;
+  resolvedBugs: number;
+  closedBugs: number;
+  criticalBugs: number;
+  resolutionRate: number;
+  averageResolutionTime: number;
+  statusDistribution: InsightSeriesItem[];
+  severityDistribution: InsightSeriesItem[];
+  bugsOverTime: InsightSeriesItem[];
+  categoryDistribution: InsightSeriesItem[];
 }
 
 export interface Submission {
@@ -141,24 +170,29 @@ export async function getBugs(filters?: BugFilters): Promise<Bug[]> {
 }
 
 export async function createBug(data: CreateBugPayload): Promise<Bug> {
-  return request<Bug>("/bugs", {
+  const bug = await request<Bug>("/bugs", {
     method: "POST",
     body: JSON.stringify(data),
   });
+  window.dispatchEvent(new Event("bugpilot:bugs-changed"));
+  return bug;
 }
 
 export async function updateBug(
   formId: string,
   data: Partial<Bug>
 ): Promise<Bug> {
-  return request<Bug>(`/bugs/${formId}`, {
+  const bug = await request<Bug>(`/bugs/${formId}`, {
     method: "PUT",
     body: JSON.stringify(data),
   });
+  window.dispatchEvent(new Event("bugpilot:bugs-changed"));
+  return bug;
 }
 
 export async function deleteBug(formId: string): Promise<void> {
   await request(`/bugs/${formId}`, { method: "DELETE" });
+  window.dispatchEvent(new Event("bugpilot:bugs-changed"));
 }
 
 export async function getPublicForm(formId: string): Promise<PublicForm> {
@@ -215,5 +249,15 @@ export async function updateSettings(data: SettingsPayload): Promise<SettingsPay
 
 export async function getStats(): Promise<Stats> {
   return request<Stats>("/stats");
+}
+
+export async function getInsights(filters: InsightsFilters = {}): Promise<Insights> {
+  const params = new URLSearchParams();
+  if (filters.dateRange) params.set("dateRange", filters.dateRange);
+  if (filters.status) params.set("status", filters.status);
+  if (filters.severity) params.set("severity", filters.severity);
+  if (filters.bugType) params.set("bugType", filters.bugType);
+  const query = params.toString();
+  return request<Insights>(`/insights${query ? `?${query}` : ""}`);
 }
 

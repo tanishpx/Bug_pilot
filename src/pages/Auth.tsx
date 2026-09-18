@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { auth, login, loginWithGoogle, isAdmin, resetPassword, signup } from "../lib/auth";
+import { auth, firebaseConfigured, login, loginWithGoogle, isAdmin, resetPassword, signup } from "../lib/auth";
 import { onAuthStateChanged } from "firebase/auth";
 
 type Mode = "login" | "signup";
@@ -18,10 +18,25 @@ export default function Auth() {
   const redirectTarget = searchParams.get("redirect") === "/admin" ? "/admin" : "/";
 
   useEffect(() => {
+    if (!auth) return undefined;
     return onAuthStateChanged(auth, (user) => {
       if (user && isAdmin(user)) navigate(redirectTarget, { replace: true });
     });
   }, [navigate, redirectTarget]);
+
+  if (!firebaseConfigured) {
+    return (
+      <div className="auth-page">
+        <div className="auth-panel">
+          <Link to="/" className="auth-back">← Back to home</Link>
+          <div className="auth-card">
+            <h1>Firebase setup required</h1>
+            <p className="auth-sub">Add the VITE_FIREBASE_* values from your Firebase project to .env, then restart the dev server.</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const switchMode = (m: Mode) => {
     setMode(m);

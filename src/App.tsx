@@ -6,7 +6,7 @@ import AdminLayout from "./pages/admin/AdminLayout";
 import FeedbackForms from "./pages/admin/FeedbackForms";
 import BugDashboard from "./pages/admin/BugDashboard";
 import Submissions from "./pages/admin/Submissions";
-import Analytics from "./pages/admin/Analytics";
+import Analytics from "./pages/admin/Analytics.tsx";
 import Settings from "./pages/admin/Settings";
 import FeedbackFormPage from "./pages/FeedbackFormPage";
 
@@ -15,10 +15,11 @@ import { auth } from "./lib/auth";
 import { ThemeProvider } from "./lib/theme";
 
 function ProtectedRoute() {
-  const [user, setUser] = useState(auth.currentUser);
-  const [loading, setLoading] = useState(!auth.currentUser);
+  const [user, setUser] = useState(auth?.currentUser || null);
+  const [loading, setLoading] = useState(Boolean(auth));
 
   useEffect(() => {
+    if (!auth) return undefined;
     return onAuthStateChanged(auth, (nextUser) => {
       setUser(nextUser);
       setLoading(false);

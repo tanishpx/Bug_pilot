@@ -49,6 +49,7 @@ Open `http://localhost:5173`. The API health endpoint is available at `http://lo
 3. Create a bug report form in **Forms** and copy its public link.
 4. Share the link with users; their reports arrive in **Submissions**.
 5. Review, prioritize, assign, and update bugs from **Bugs**.
+6. Open **Analytics** to view live bug counts, status/severity/category breakdowns, creation trends, and resolution metrics. Analytics reads the same MongoDB records as the Bugs dashboard through `GET /api/insights`.
 
 ## Useful commands
 

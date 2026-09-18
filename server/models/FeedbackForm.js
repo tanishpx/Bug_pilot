@@ -44,12 +44,17 @@ const feedbackFormSchema = new mongoose.Schema(
         "Triaged",
         "Assigned",
         "In Progress",
+        "Resolved",
         "Fixed",
         "Retest",
         "Closed",
         "Reopened",
       ],
       default: "Open",
+    },
+    resolvedAt: {
+      type: Date,
+      default: null,
     },
     assignee: {
       type: String,

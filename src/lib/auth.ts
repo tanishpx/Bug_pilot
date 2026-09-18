@@ -9,7 +9,7 @@ import {
   sendPasswordResetEmail,
   signOut,
 } from "firebase/auth";
-import type { User, UserCredential } from "firebase/auth";
+import type { Auth, User, UserCredential } from "firebase/auth";
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -21,16 +21,29 @@ const firebaseConfig = {
   measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
 };
 
-const app = initializeApp(firebaseConfig);
+export const firebaseConfigured = Boolean(
+  firebaseConfig.apiKey &&
+  firebaseConfig.authDomain &&
+  firebaseConfig.projectId &&
+  firebaseConfig.appId
+);
 
-export const auth = getAuth(app);
+const app = firebaseConfigured ? initializeApp(firebaseConfig) : null;
+export const auth: Auth | null = app ? getAuth(app) : null;
+
+function requireAuth(): Auth {
+  if (!auth) {
+    throw new Error("Firebase is not configured. Add the VITE_FIREBASE_* values to .env.");
+  }
+  return auth;
+}
 
 export const signup = async (
   email: string,
   password: string
 ): Promise<UserCredential> => {
   return await createUserWithEmailAndPassword(
-    auth,
+    requireAuth(),
     email,
     password
   );
@@ -41,26 +54,26 @@ export const login = async (
   password: string
 ): Promise<UserCredential> => {
   return await signInWithEmailAndPassword(
-    auth,
+    requireAuth(),
     email,
     password
   );
 };
 
 export const logout = async () => {
-  return await signOut(auth);
+  return await signOut(requireAuth());
 };
 
 export const resetPassword = async (email: string): Promise<void> => {
-  await sendPasswordResetEmail(auth, email);
+  await sendPasswordResetEmail(requireAuth(), email);
 };
 
-export const getSession = (): User | null => auth.currentUser;
+export const getSession = (): User | null => auth?.currentUser || null;
 
 export const isAdmin = (user: User | null = getSession()): boolean => {
   return Boolean(user);
 };
 
 export const loginWithGoogle = async (): Promise<UserCredential> => {
-  return await signInWithPopup(auth, new GoogleAuthProvider());
+  return await signInWithPopup(requireAuth(), new GoogleAuthProvider());
 };

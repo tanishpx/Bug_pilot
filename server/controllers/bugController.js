@@ -71,7 +71,7 @@ export async function createBug(req, res) {
 export async function updateBug(req, res) {
   try {
     const { formId } = req.params;
-    const updates = req.body;
+    const updates = { ...req.body };
 
     const originalBug = await FeedbackForm.findOne({ formId, userId: req.userId });
     if (!originalBug) {
@@ -79,6 +79,14 @@ export async function updateBug(req, res) {
     }
 
     const previousStatus = originalBug.status;
+
+    if (
+      updates.status &&
+      ["Resolved", "Fixed", "Closed"].includes(updates.status) &&
+      !["Resolved", "Fixed", "Closed"].includes(previousStatus)
+    ) {
+      updates.resolvedAt = new Date();
+    }
 
     const bug = await FeedbackForm.findOneAndUpdate(
       { formId, userId: req.userId },

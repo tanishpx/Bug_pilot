@@ -11,6 +11,7 @@ import bugsRouter from "./routes/bugs.js";
 import submissionsRouter from "./routes/submissions.js";
 import statsRouter from "./routes/stats.js";
 import settingsRouter from "./routes/settings.js";
+import insightsRouter from "./routes/insights.js";
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -52,6 +53,7 @@ app.get("/api/health", (_req, res) => {
 app.use("/api/bugs", bugsRouter);
 app.use("/api/submissions", submissionsRouter);
 app.use("/api/stats", statsRouter);
+app.use("/api/insights", insightsRouter);
 app.use("/api/settings", settingsRouter);
 
 

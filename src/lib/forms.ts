@@ -13,6 +13,7 @@ export type BugStatus =
   | "Triaged"
   | "Assigned"
   | "In Progress"
+  | "Resolved"
   | "Fixed"
   | "Retest"
   | "Closed"
@@ -54,6 +55,7 @@ export const BUG_STATUSES: BugStatus[] = [
   "Triaged",
   "Assigned",
   "In Progress",
+  "Resolved",
   "Fixed",
   "Retest",
   "Closed",
