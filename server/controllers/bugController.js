@@ -1,6 +1,12 @@
 import FeedbackForm from "../models/FeedbackForm.js";
 import Submission from "../models/Submission.js";
 import { sendNewBugEmail, sendStatusChangeEmail } from "../services/emailService.js";
+import {
+  escapeRegExp,
+  isValidEmail,
+  pickBugUpdates,
+  validateBugFields,
+} from "../utils/validation.js";
 
 
 export async function getBugs(req, res) {
@@ -13,10 +19,11 @@ export async function getBugs(req, res) {
     if (priority) filter.priority = priority;
     if (bugType) filter.bugType = bugType;
     if (search) {
+      const safeSearch = escapeRegExp(search);
       filter.$or = [
-        { title: { $regex: search, $options: "i" } },
-        { description: { $regex: search, $options: "i" } },
-        { assignee: { $regex: search, $options: "i" } },
+        { title: { $regex: safeSearch, $options: "i" } },
+        { description: { $regex: safeSearch, $options: "i" } },
+        { assignee: { $regex: safeSearch, $options: "i" } },
       ];
     }
 
@@ -45,6 +52,11 @@ export async function createBug(req, res) {
       return res.status(400).json({ error: "Title is required" });
     }
 
+    const validationError = validateBugFields({ bugType, severity, priority });
+    if (validationError) {
+      return res.status(400).json({ error: validationError });
+    }
+
     const formId = `BUG-${Date.now()}`;
 
     const bug = await FeedbackForm.create({
@@ -71,7 +83,18 @@ export async function createBug(req, res) {
 export async function updateBug(req, res) {
   try {
     const { formId } = req.params;
-    const updates = { ...req.body };
+    // Whitelist updatable fields so callers cannot overwrite userId,
+    // formId, resolvedAt or other internal fields (mass-assignment).
+    const updates = pickBugUpdates(req.body);
+
+    const validationError = validateBugFields(updates);
+    if (validationError) {
+      return res.status(400).json({ error: validationError });
+    }
+
+    if (updates.title !== undefined) {
+      updates.title = updates.title.trim();
+    }
 
     const originalBug = await FeedbackForm.findOne({ formId, userId: req.userId });
     if (!originalBug) {
@@ -175,10 +198,15 @@ export async function submitFeedback(req, res) {
         .json({ error: "Bug description is required" });
     }
 
-    const form = await FeedbackForm.findOne({ formId });
+    if (reporterEmail && !isValidEmail(reporterEmail)) {
+      return res.status(400).json({ error: "Invalid reporter email" });
+    }
+
+    // Only public forms accept anonymous submissions, mirroring getPublicForm.
+    const form = await FeedbackForm.findOne({ formId, isPublic: true });
 
     if (!form) {
-      return res.status(404).json({ error: "Form not found" });
+      return res.status(404).json({ error: "Form not found or is not public" });
     }
 
     const resolvedBugTitle = (bugTitle || title || form.title || "Bug Report").trim();

@@ -1,5 +1,6 @@
 import nodemailer from "nodemailer";
 import Settings from "../models/Settings.js";
+import { escapeHtml } from "../utils/validation.js";
 
 function getTransporter() {
   const host = process.env.EMAIL_HOST;
@@ -44,12 +45,12 @@ export async function sendNewBugEmail({ userId, title, severity, description, da
       text: `A new bug has been reported on ${appName}.\n\nTitle: ${title}\nSeverity: ${severity}\nDescription: ${description}\nDate/Time: ${date}`,
       html: `
         <h3>New Bug Report Submitted</h3>
-        <p>A new bug has been reported on <strong>${appName}</strong>.</p>
+        <p>A new bug has been reported on <strong>${escapeHtml(appName)}</strong>.</p>
         <table>
-          <tr><td><strong>Title:</strong></td><td>${title}</td></tr>
-          <tr><td><strong>Severity:</strong></td><td>${severity}</td></tr>
-          <tr><td><strong>Description:</strong></td><td>${description}</td></tr>
-          <tr><td><strong>Date/Time:</strong></td><td>${date}</td></tr>
+          <tr><td><strong>Title:</strong></td><td>${escapeHtml(title)}</td></tr>
+          <tr><td><strong>Severity:</strong></td><td>${escapeHtml(severity)}</td></tr>
+          <tr><td><strong>Description:</strong></td><td>${escapeHtml(description)}</td></tr>
+          <tr><td><strong>Date/Time:</strong></td><td>${escapeHtml(date)}</td></tr>
         </table>
       `,
     });
@@ -75,12 +76,12 @@ export async function sendStatusChangeEmail({ userId, title, previousStatus, new
       text: `A bug status has been updated on ${appName}.\n\nBug Title: ${title}\nPrevious Status: ${previousStatus}\nNew Status: ${newStatus}\nUpdated Date/Time: ${date}`,
       html: `
         <h3>Bug Status Updated</h3>
-        <p>A bug status has been updated on <strong>${appName}</strong>.</p>
+        <p>A bug status has been updated on <strong>${escapeHtml(appName)}</strong>.</p>
         <table>
-          <tr><td><strong>Bug Title:</strong></td><td>${title}</td></tr>
-          <tr><td><strong>Previous Status:</strong></td><td>${previousStatus}</td></tr>
-          <tr><td><strong>New Status:</strong></td><td>${newStatus}</td></tr>
-          <tr><td><strong>Updated Date/Time:</strong></td><td>${date}</td></tr>
+          <tr><td><strong>Bug Title:</strong></td><td>${escapeHtml(title)}</td></tr>
+          <tr><td><strong>Previous Status:</strong></td><td>${escapeHtml(previousStatus)}</td></tr>
+          <tr><td><strong>New Status:</strong></td><td>${escapeHtml(newStatus)}</td></tr>
+          <tr><td><strong>Updated Date/Time:</strong></td><td>${escapeHtml(date)}</td></tr>
         </table>
       `,
     });
