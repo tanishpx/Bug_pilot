@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   getBugs,
   createBug,
@@ -30,6 +30,12 @@ const emptyForm: CreateBugPayload = {
   tags: [],
 };
 
+// Older documents may predate the visibility flag; the schema defaults
+// to public, so treat a missing value as public.
+export function isFormPublic(bug: Pick<Bug, "isPublic">): boolean {
+  return bug.isPublic !== false;
+}
+
 export default function FeedbackForms() {
   const [bugs, setBugs] = useState<Bug[]>([]);
   const [draft, setDraft] = useState<CreateBugPayload>(emptyForm);
@@ -41,6 +47,14 @@ export default function FeedbackForms() {
   const [submitting, setSubmitting] = useState(false);
   const [savingEdit, setSavingEdit] = useState(false);
   const [copySuccess, setCopySuccess] = useState<string | null>(null);
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const titleInputRef = useRef<HTMLInputElement>(null);
+  const builderRef = useRef<HTMLFormElement>(null);
+
+  const focusBuilder = () => {
+    builderRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    setTimeout(() => titleInputRef.current?.focus({ preventScroll: true }), 300);
+  };
 
   const loadBugs = useCallback(async () => {
     try {
@@ -109,6 +123,7 @@ export default function FeedbackForms() {
         assignee: editingBug.assignee || "Unassigned",
         environment: editingBug.environment || "",
         tags: updatedTags,
+        isPublic: isFormPublic(editingBug),
       });
 
       setBugs((prev) =>
@@ -146,9 +161,11 @@ export default function FeedbackForms() {
     }
   };
 
+  const publicLink = (formId: string) =>
+    `${window.location.origin}/#/feedback/${formId}`;
+
   const copyLink = (formId: string) => {
-    const url = `${window.location.origin}/#/feedback/${formId}`;
-    navigator.clipboard.writeText(url);
+    navigator.clipboard.writeText(publicLink(formId));
     setCopySuccess(formId);
     setTimeout(() => setCopySuccess(null), 2000);
   };
@@ -178,11 +195,12 @@ export default function FeedbackForms() {
 
       <div className="admin-grid">
         {/* New Form Builder */}
-        <form className="form-builder" onSubmit={addBug}>
+        <form className="form-builder" onSubmit={addBug} ref={builderRef}>
           <h2>New feedback form</h2>
           <label>
             <span>Form Title *</span>
             <input
+              ref={titleInputRef}
               value={draft.title}
               onChange={(e) => update("title", e.target.value)}
               placeholder="e.g. Checkout bug report, Customer Feedback"
@@ -198,71 +216,86 @@ export default function FeedbackForms() {
               rows={3}
             />
           </label>
-          <div className="two-col">
-            <label>
-              <span>Default Bug type</span>
-              <select
-                value={draft.bugType}
-                onChange={(e) => update("bugType", e.target.value as BugType)}
-              >
-                {BUG_TYPES.map((b) => (
-                  <option key={b}>{b}</option>
-                ))}
-              </select>
-            </label>
-            <label>
-              <span>Default Severity</span>
-              <select
-                value={draft.severity}
-                onChange={(e) =>
-                  update("severity", e.target.value as Severity)
-                }
-              >
-                {SEVERITIES.map((s) => (
-                  <option key={s}>{s}</option>
-                ))}
-              </select>
-            </label>
-          </div>
-          <div className="two-col">
-            <label>
-              <span>Priority</span>
-              <select
-                value={draft.priority}
-                onChange={(e) =>
-                  update("priority", e.target.value as Priority)
-                }
-              >
-                {PRIORITIES.map((p) => (
-                  <option key={p}>{p}</option>
-                ))}
-              </select>
-            </label>
-            <label>
-              <span>Target Environment</span>
-              <input
-                value={draft.environment}
-                onChange={(e) => update("environment", e.target.value)}
-                placeholder="e.g. Production, Staging"
-              />
-            </label>
-          </div>
-          <label>
-            <span>Assignee / Team</span>
-            <input
-              value={draft.assignee}
-              onChange={(e) => update("assignee", e.target.value)}
-              placeholder="e.g. Frontend Team"
-            />
-          </label>
-          <label>
-            <span>Tags (comma separated)</span>
-            <input
-              value={tagInput}
-              onChange={(e) => setTagInput(e.target.value)}
-              placeholder="ui, payment, checkout"
-            />
-          </label>
+
+          <button
+            type="button"
+            className="collapse-toggle"
+            aria-expanded={showAdvanced}
+            onClick={() => setShowAdvanced((v) => !v)}
+          >
+            <i className={`fa-solid fa-chevron-${showAdvanced ? "down" : "right"}`}></i>
+            Defaults & team <span className="collapse-hint">optional</span>
+          </button>
+
+          {showAdvanced && (
+            <div className="advanced-fields">
+              <div className="two-col">
+                <label>
+                  <span>Default Bug type</span>
+                  <select
+                    value={draft.bugType}
+                    onChange={(e) => update("bugType", e.target.value as BugType)}
+                  >
+                    {BUG_TYPES.map((b) => (
+                      <option key={b}>{b}</option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  <span>Default Severity</span>
+                  <select
+                    value={draft.severity}
+                    onChange={(e) =>
+                      update("severity", e.target.value as Severity)
+                    }
+                  >
+                    {SEVERITIES.map((s) => (
+                      <option key={s}>{s}</option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <div className="two-col">
+                <label>
+                  <span>Priority</span>
+                  <select
+                    value={draft.priority}
+                    onChange={(e) =>
+                      update("priority", e.target.value as Priority)
+                    }
+                  >
+                    {PRIORITIES.map((p) => (
+                      <option key={p}>{p}</option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  <span>Target Environment</span>
+                  <input
+                    value={draft.environment}
+                    onChange={(e) => update("environment", e.target.value)}
+                    placeholder="e.g. Production, Staging"
+                  />
+                </label>
+              </div>
+              <label>
+                <span>Assignee / Team</span>
+                <input
+                  value={draft.assignee}
+                  onChange={(e) => update("assignee", e.target.value)}
+                  placeholder="e.g. Frontend Team"
+                />
+              </label>
+              <label>
+                <span>Tags (comma separated)</span>
+                <input
+                  value={tagInput}
+                  onChange={(e) => setTagInput(e.target.value)}
+                  placeholder="ui, payment, checkout"
+                />
+              </label>
+            </div>
+          )}
           <button
             className="btn primary lg block"
             type="submit"
@@ -276,11 +309,18 @@ export default function FeedbackForms() {
         <div className="form-list">
           <h2>Created forms</h2>
           {bugs.length === 0 && (
-            <p className="empty">
-              No forms yet. Create your first one using the builder on the left.
-            </p>
+            <div className="empty-state">
+              <i className="fa-solid fa-clipboard-list empty-state-icon"></i>
+              <h3>No feedback forms yet</h3>
+              <p>Create your first form — it takes 10 seconds. Share the link anywhere and bug reports land here.</p>
+              <button type="button" className="btn primary" onClick={focusBuilder}>
+                <i className="fa-solid fa-plus"></i> Create your first form
+              </button>
+            </div>
           )}
-          {bugs.map((b) => (
+          {bugs.map((b) => {
+            const pub = isFormPublic(b);
+            return (
             <div className="form-item" key={b.formId}>
               <div className="fi-top">
                 <h3>{b.title}</h3>
@@ -319,6 +359,9 @@ export default function FeedbackForms() {
                   {b.status}
                 </span>
                 <span className="fi-assignee">{b.assignee}</span>
+                <span className={`badge ${pub ? "vis-public" : "vis-private"}`}>
+                  {pub ? "● Public" : "◆ Private"}
+                </span>
               </div>
               {b.tags && b.tags.length > 0 && (
                 <div className="fi-tags">
@@ -331,19 +374,30 @@ export default function FeedbackForms() {
                 <button
                   className="btn sm btn-copy"
                   onClick={() => copyLink(b.formId)}
+                  title={pub ? "Copy the public share link" : "Form is private — the link won't work until you make it public"}
                 >
                   {copySuccess === b.formId
                     ? "✓ Copied!"
-                    : "Copy link"}
+                    : pub ? "Copy link" : "Copy link (private)"}
                 </button>
-                <a
-                  href={`/#/feedback/${b.formId}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="btn sm ghost"
-                >
-                  Open form ↗
-                </a>
+                {pub ? (
+                  <a
+                    href={`/#/feedback/${b.formId}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="btn sm ghost"
+                  >
+                    Open form ↗
+                  </a>
+                ) : (
+                  <button
+                    className="btn sm ghost"
+                    disabled
+                    title="Private forms can't be opened via public link"
+                  >
+                    Open form ↗
+                  </button>
+                )}
                 <button
                   className="btn sm ghost"
                   onClick={() => setActive(b)}
@@ -352,7 +406,8 @@ export default function FeedbackForms() {
                 </button>
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 
@@ -498,6 +553,32 @@ export default function FeedbackForms() {
                 />
               </label>
 
+              <div className="visibility-row">
+                <div>
+                  <span className="visibility-title">
+                    <i className={`fa-solid ${isFormPublic(editingBug) ? "fa-earth-americas" : "fa-lock"}`}></i>
+                    {isFormPublic(editingBug) ? "Public form" : "Private form"}
+                  </span>
+                  <p className="visibility-sub">
+                    {isFormPublic(editingBug)
+                      ? "Anyone with the link can submit feedback."
+                      : "Link disabled — submissions are blocked until you make it public."}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={isFormPublic(editingBug)}
+                  aria-label="Toggle form visibility"
+                  className={`switch ${isFormPublic(editingBug) ? "on" : ""}`}
+                  onClick={() =>
+                    setEditingBug({ ...editingBug, isPublic: !isFormPublic(editingBug) })
+                  }
+                >
+                  <span className="knob" />
+                </button>
+              </div>
+
               <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", marginTop: "12px" }}>
                 <button
                   type="button"
@@ -586,6 +667,9 @@ export default function FeedbackForms() {
                 </span>
                 <span className="badge badge-priority">
                   {active.priority}
+                </span>
+                <span className={`badge ${isFormPublic(active) ? "vis-public" : "vis-private"}`}>
+                  {isFormPublic(active) ? "● Public" : "◆ Private"}
                 </span>
               </div>
               {active.tags && active.tags.length > 0 && (

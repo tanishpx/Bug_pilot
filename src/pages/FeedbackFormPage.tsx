@@ -36,6 +36,22 @@ export default function FeedbackFormPage() {
   const [copied, setCopied] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const errorRef = useRef<HTMLDivElement>(null);
+
+  // Bring server-side / validation errors into view on small screens.
+  useEffect(() => {
+    if (errorMsg && errorRef.current) {
+      errorRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }, [errorMsg]);
+
+  // Required-field completion shown as a slim progress bar under the header.
+  const completedSteps = [
+    bugTitle.trim(),
+    bugDescription.trim(),
+    stepsToReproduce.trim(),
+  ].filter(Boolean).length;
+  const progressPercent = Math.round(((completedSteps + 2) / 5) * 100);
 
   useEffect(() => {
     if (!formId) return;
@@ -90,28 +106,34 @@ export default function FeedbackFormPage() {
     const maxFiles = 5;
     const maxSize = 10 * 1024 * 1024; // 10MB
 
-    Array.from(files).forEach((file) => {
-      if (attachments.length >= maxFiles) {
-        setErrorMsg(`Maximum of ${maxFiles} attachments allowed.`);
-        return;
-      }
-      if (file.size > maxSize) {
-        setErrorMsg(`File "${file.name}" exceeds maximum allowed size of 10MB.`);
-        return;
-      }
+    const remaining = maxFiles - attachments.length;
+    if (remaining <= 0) {
+      setErrorMsg(`Maximum of ${maxFiles} attachments allowed.`);
+      return;
+    }
 
-      const reader = new FileReader();
-      reader.onload = () => {
-        const newFile: AttachedFile = {
-          name: file.name,
-          size: file.size,
-          type: file.type,
-          dataUrl: reader.result as string,
+    Array.from(files)
+      .slice(0, remaining)
+      .forEach((file) => {
+        if (file.size > maxSize) {
+          setErrorMsg(`File "${file.name}" exceeds maximum allowed size of 10MB.`);
+          return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = () => {
+          const newFile: AttachedFile = {
+            name: file.name,
+            size: file.size,
+            type: file.type,
+            dataUrl: reader.result as string,
+          };
+          setAttachments((prev) =>
+            prev.length >= maxFiles ? prev : [...prev, newFile]
+          );
         };
-        setAttachments((prev) => [...prev, newFile]);
-      };
-      reader.readAsDataURL(file);
-    });
+        reader.readAsDataURL(file);
+      });
   };
 
   const handleRemoveAttachment = (index: number) => {
@@ -175,6 +197,8 @@ export default function FeedbackFormPage() {
     setBugTitle("");
     setBugDescription("");
     setStepsToReproduce("");
+    setSeverity((form?.severity as Severity) || "Medium");
+    setBugType((form?.bugType as BugType) || "UI");
     setEnvironment(form?.environment || "");
     setReporterEmail("");
     setAttachments([]);
@@ -197,7 +221,8 @@ export default function FeedbackFormPage() {
         <span className="logo-mark">◈</span>
         <h1>Form not found</h1>
         <p>
-          This feedback form doesn't exist or is no longer active.
+          This feedback form doesn't exist, is set to private, or is no
+          longer active.
         </p>
         <Link to="/" className="btn primary lg">
           Go home
@@ -293,6 +318,19 @@ export default function FeedbackFormPage() {
           <p className="saas-subtitle">
             {form?.description || "Help us squash bugs by providing clear and detailed information."}
           </p>
+          <div
+            className="saas-progress"
+            role="progressbar"
+            aria-valuenow={progressPercent}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            title={`${completedSteps + 2} of 5 required sections complete`}
+          >
+            <div
+              className="saas-progress-fill"
+              style={{ width: `${progressPercent}%` }}
+            />
+          </div>
         </div>
 
         <form className="saas-form" onSubmit={handleSubmit}>
@@ -519,7 +557,7 @@ export default function FeedbackFormPage() {
           </div>
 
           {errorMsg && (
-            <div className="saas-alert-error">
+            <div className="saas-alert-error" ref={errorRef}>
               <i className="fa-solid fa-circle-exclamation"></i>
               <span>{errorMsg}</span>
             </div>
