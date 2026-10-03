@@ -1,0 +1,11 @@
+node_modules
+npm-debug.log
+.git
+.gitignore
+.dockerignore
+Dockerfile*
+docker-compose*
+Jenkinsfile
+README.md
+test.js
+students.json
