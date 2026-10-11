@@ -1,0 +1,73 @@
+[
+  {
+    "id": "BUG-101",
+    "title": "Uncaught TypeError when submitting feedback form without email",
+    "description": "When a guest user submits a bug report without filling in the optional reporter email, the client throws a TypeError reading property 'trim' of undefined and the form gets stuck in loading state.",
+    "type": "UI",
+    "severity": "High",
+    "status": "New",
+    "stepsToReproduce": "1. Open the public bug submission form at /submit/form-123\n2. Fill in bug title and description\n3. Leave the reporter email empty\n4. Click 'Submit Report'\n5. Notice the submit button shows spinner indefinitely and console displays error",
+    "environment": "OS: macOS Sonoma 14.5, Browser: Chrome 126.0.6478.127, Viewport: 1920x1080",
+    "reporterEmail": "qa-tester@example.com",
+    "attachments": [
+      "https://storage.example.com/screenshots/stuck-spinner.png"
+    ],
+    "logs": "TypeError: Cannot read properties of undefined (reading 'trim')\n    at validateForm (src/components/FormSubmit.tsx:42:25)\n    at handleSubmit (src/components/FormSubmit.tsx:78:12)\n    at HTMLButtonElement.dispatch (node_modules/react-dom/cjs/react-dom.production.min.js:14:105)",
+    "relatedFiles": [
+      "src/components/FormSubmit.tsx",
+      "src/utils/validators.ts"
+    ],
+    "investigationNotes": [
+      {
+        "id": "NOTE-1",
+        "author": "triage-bot",
+        "hypothesis": "Email field might be initialized as undefined instead of empty string in form state.",
+        "details": "Validator expects a string and invokes .trim() directly without checking for null/undefined.",
+        "suggestedFix": "Use optional chaining (email?.trim()) or default to empty string.",
+        "timestamp": "2026-10-10T14:22:00.000Z"
+      }
+    ],
+    "createdAt": "2026-10-10T14:20:00.000Z",
+    "updatedAt": "2026-10-10T14:22:00.000Z"
+  },
+  {
+    "id": "BUG-102",
+    "title": "Auth token expiration causes 500 error instead of 401 redirect",
+    "description": "When the JWT expires during an active session, API requests to /api/bugs return 500 Internal Server Error due to unhandled TokenExpiredError instead of 401 Unauthorized.",
+    "type": "Backend",
+    "severity": "Critical",
+    "status": "In Progress",
+    "stepsToReproduce": "1. Log in to admin dashboard\n2. Wait for JWT token to expire or alter token expiration in local storage\n3. Refresh bug list or navigate to /admin/bugs\n4. Dashboard displays generic server error modal instead of redirecting to /auth",
+    "environment": "Node.js: 20.x, Express: 4.19.2, Environment: Staging",
+    "reporterEmail": "developer@example.com",
+    "attachments": [],
+    "logs": "TokenExpiredError: jwt expired\n    at /server/middleware/auth.js:28:19\n    at JsonWebTokenError.verify (/server/node_modules/jsonwebtoken/index.js:120:7)",
+    "relatedFiles": [
+      "server/middleware/auth.js",
+      "server/controllers/submissionController.js"
+    ],
+    "investigationNotes": [],
+    "createdAt": "2026-10-11T09:15:00.000Z",
+    "updatedAt": "2026-10-11T09:15:00.000Z"
+  },
+  {
+    "id": "BUG-103",
+    "title": "Analytics aggregation slow query when submissions exceed 10,000",
+    "description": "GET /api/insights takes over 4.5 seconds to return because status/severity counts perform a full table scan without compound index on (userId, createdAt).",
+    "type": "Database",
+    "severity": "Medium",
+    "status": "New",
+    "stepsToReproduce": "1. Populate test database with 15k submissions\n2. Open /admin/analytics\n3. Measure network response time for GET /api/insights",
+    "environment": "MongoDB Atlas M10 cluster, Mongoose 8.x",
+    "reporterEmail": "backend-team@example.com",
+    "attachments": [],
+    "logs": "PlanSummary: COLLSCAN\nmillis: 4520\nnumYields: 38",
+    "relatedFiles": [
+      "server/models/Submission.js",
+      "server/controllers/insightsController.js"
+    ],
+    "investigationNotes": [],
+    "createdAt": "2026-10-11T12:00:00.000Z",
+    "updatedAt": "2026-10-11T12:00:00.000Z"
+  }
+]
