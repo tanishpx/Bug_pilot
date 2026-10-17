@@ -1,4 +1,6 @@
-import FeedbackForm from "../models/FeedbackForm.js";
+import mongoose from "mongoose";
+import Bug from "../models/Bug.js";
+import InvestigationNote from "../models/InvestigationNote.js";
 import Submission from "../models/Submission.js";
 import { sendNewBugEmail, sendStatusChangeEmail } from "../services/emailService.js";
 import {
@@ -6,31 +8,153 @@ import {
   isValidEmail,
   pickBugUpdates,
   validateBugFields,
+  validateInvestigationNote,
 } from "../utils/validation.js";
 
+// Helper to find a bug by either bugId (e.g. BUG-101), legacy formId, or MongoDB ObjectId
+export async function findBugByIdentifier(identifier, userFilter = null) {
+  if (!identifier) return null;
+
+  const conditions = [
+    { bugId: identifier },
+    { formId: identifier },
+  ];
+
+  if (mongoose.isValidObjectId(identifier)) {
+    conditions.push({ _id: identifier });
+  }
+
+  const query = { $or: conditions };
+  if (userFilter) {
+    query.userId = userFilter;
+  }
+
+  return Bug.findOne(query);
+}
 
 export async function getBugs(req, res) {
   try {
-    const { status, severity, priority, bugType, search } = req.query;
-    const filter = { userId: req.userId };
+    const {
+      status,
+      severity,
+      priority,
+      bugType,
+      type,
+      search,
+      reporter,
+      reporterEmail,
+      myBugs,
+      limit,
+      page,
+      sortBy = "createdAt",
+      sortOrder = "desc",
+    } = req.query;
 
+    const filter = {};
+
+    // Allow user-scoped isolation when explicitly requested
+    if (myBugs === "true" && req.userId) {
+      filter.userId = req.userId;
+    }
+
+    const effectiveType = bugType || type;
+    if (effectiveType) filter.bugType = effectiveType;
     if (status) filter.status = status;
     if (severity) filter.severity = severity;
     if (priority) filter.priority = priority;
-    if (bugType) filter.bugType = bugType;
-    if (search) {
-      const safeSearch = escapeRegExp(search);
+
+    const effectiveReporter = reporter || reporterEmail;
+    if (effectiveReporter) {
+      const safeReporter = escapeRegExp(effectiveReporter);
       filter.$or = [
-        { title: { $regex: safeSearch, $options: "i" } },
-        { description: { $regex: safeSearch, $options: "i" } },
-        { assignee: { $regex: safeSearch, $options: "i" } },
+        { reporter: { $regex: safeReporter, $options: "i" } },
+        { reporterEmail: { $regex: safeReporter, $options: "i" } },
       ];
     }
 
-    const bugs = await FeedbackForm.find(filter).sort({ updatedAt: -1 });
-    res.json(bugs);
+    if (search) {
+      const safeSearch = escapeRegExp(search);
+      const searchOr = [
+        { title: { $regex: safeSearch, $options: "i" } },
+        { description: { $regex: safeSearch, $options: "i" } },
+        { assignee: { $regex: safeSearch, $options: "i" } },
+        { bugId: { $regex: safeSearch, $options: "i" } },
+        { logs: { $regex: safeSearch, $options: "i" } },
+      ];
+
+      if (filter.$or) {
+        filter.$and = [{ $or: filter.$or }, { $or: searchOr }];
+        delete filter.$or;
+      } else {
+        filter.$or = searchOr;
+      }
+    }
+
+    const maxLimit = Math.min(Math.max(parseInt(limit, 10) || 100, 1), 200);
+    const currentPage = Math.max(parseInt(page, 10) || 1, 1);
+    const skip = (currentPage - 1) * maxLimit;
+    const sort = { [sortBy]: sortOrder === "asc" ? 1 : -1 };
+
+    const bugs = await Bug.find(filter)
+      .sort(sort)
+      .skip(skip)
+      .limit(maxLimit)
+      .lean();
+
+    // Attach investigationNotes count and format clean objects
+    const bugIds = bugs.map((b) => b.bugId);
+    const notes = await InvestigationNote.find({ bugId: { $in: bugIds } }).lean();
+
+    const notesByBugId = {};
+    for (const note of notes) {
+      if (!notesByBugId[note.bugId]) notesByBugId[note.bugId] = [];
+      notesByBugId[note.bugId].push(note);
+    }
+
+    const formattedBugs = bugs.map((b) => ({
+      ...b,
+      id: b.bugId,
+      formId: b.bugId,
+      type: b.bugType,
+      investigationNotes: notesByBugId[b.bugId] || [],
+    }));
+
+    res.json(formattedBugs);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error("[getBugs] Error:", err.message);
+    res.status(500).json({ error: "Failed to retrieve bugs" });
+  }
+}
+
+export async function getBugById(req, res) {
+  try {
+    const { id, formId } = req.params;
+    const identifier = id || formId;
+
+    const bug = await findBugByIdentifier(identifier);
+    if (!bug) {
+      return res.status(404).json({ error: `Bug with ID "${identifier}" not found` });
+    }
+
+    const notes = await InvestigationNote.find({ bugId: bug.bugId })
+      .sort({ createdAt: 1 })
+      .lean();
+
+    const result = {
+      ...bug.toObject(),
+      id: bug.bugId,
+      formId: bug.bugId,
+      type: bug.bugType,
+      investigationNotes: notes.map((n) => ({
+        ...n,
+        id: n.noteId,
+      })),
+    };
+
+    res.json(result);
+  } catch (err) {
+    console.error("[getBugById] Error:", err.message);
+    res.status(500).json({ error: "Failed to retrieve bug details" });
   }
 }
 
@@ -40,53 +164,101 @@ export async function createBug(req, res) {
       title,
       description,
       bugType,
+      type,
       severity,
       priority,
+      status,
       assignee,
       reporter,
+      reporterEmail,
       environment,
+      stepsToReproduce,
+      logs,
+      relatedFiles,
+      attachments,
       tags,
+      isPublic,
+      id,
+      bugId,
     } = req.body;
 
     if (!title || !title.trim()) {
       return res.status(400).json({ error: "Title is required" });
     }
 
-    const validationError = validateBugFields({ bugType, severity, priority });
+    const effectiveType = bugType || type || "UI";
+    const validationError = validateBugFields({
+      title,
+      bugType: effectiveType,
+      severity: severity || "Medium",
+      priority: priority || "P2",
+      status: status || "New",
+      tags,
+      attachments,
+      relatedFiles,
+      reporterEmail,
+    });
+
     if (validationError) {
       return res.status(400).json({ error: validationError });
     }
 
-    const formId = `BUG-${Date.now()}`;
+    // Determine unique bug ID (custom, BUG-sequential, or timestamp-based)
+    let assignedBugId = bugId || id;
+    if (!assignedBugId) {
+      const count = await Bug.countDocuments();
+      assignedBugId = `BUG-${count + 101}`;
+    }
 
-    const bug = await FeedbackForm.create({
-      userId: req.userId,
-      formId,
+    // Ensure uniqueness if collision occurs
+    const existing = await Bug.findOne({ bugId: assignedBugId });
+    if (existing) {
+      assignedBugId = `BUG-${Date.now()}`;
+    }
+
+    const bug = await Bug.create({
+      userId: req.userId || "dev-user",
+      bugId: assignedBugId,
+      formId: assignedBugId,
       title: title.trim(),
-      description: description || "",
-      bugType: bugType || "UI",
+      description: description ? description.trim() : "",
+      bugType: effectiveType,
       severity: severity || "Medium",
       priority: priority || "P2",
-      status: "Open",
+      status: status || "New",
       assignee: (assignee && assignee.trim()) || "Unassigned",
-      reporter: reporter || "",
-      environment: environment || "",
-      tags: tags || [],
+      reporter: (reporter && reporter.trim()) || reporterEmail || "",
+      reporterEmail: (reporterEmail && reporterEmail.trim()) || "",
+      environment: environment ? environment.trim() : "",
+      stepsToReproduce: stepsToReproduce ? stepsToReproduce.trim() : "",
+      logs: logs ? logs.trim() : "",
+      relatedFiles: Array.isArray(relatedFiles) ? relatedFiles : [],
+      attachments: Array.isArray(attachments) ? attachments : [],
+      tags: Array.isArray(tags) ? tags : [],
+      isPublic: isPublic !== false,
     });
 
-    res.status(201).json(bug);
+    const result = {
+      ...bug.toObject(),
+      id: bug.bugId,
+      formId: bug.bugId,
+      type: bug.bugType,
+      investigationNotes: [],
+    };
+
+    res.status(201).json(result);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error("[createBug] Error:", err.message);
+    res.status(500).json({ error: "Failed to create bug" });
   }
 }
 
 export async function updateBug(req, res) {
   try {
-    const { formId } = req.params;
-    // Whitelist updatable fields so callers cannot overwrite userId,
-    // formId, resolvedAt or other internal fields (mass-assignment).
-    const updates = pickBugUpdates(req.body);
+    const { id, formId } = req.params;
+    const identifier = id || formId;
 
+    const updates = pickBugUpdates(req.body);
     const validationError = validateBugFields(updates);
     if (validationError) {
       return res.status(400).json({ error: validationError });
@@ -96,9 +268,9 @@ export async function updateBug(req, res) {
       updates.title = updates.title.trim();
     }
 
-    const originalBug = await FeedbackForm.findOne({ formId, userId: req.userId });
+    const originalBug = await findBugByIdentifier(identifier);
     if (!originalBug) {
-      return res.status(404).json({ error: "Bug not found" });
+      return res.status(404).json({ error: `Bug with ID "${identifier}" not found` });
     }
 
     const previousStatus = originalBug.status;
@@ -111,60 +283,143 @@ export async function updateBug(req, res) {
       updates.resolvedAt = new Date();
     }
 
-    const bug = await FeedbackForm.findOneAndUpdate(
-      { formId, userId: req.userId },
+    const updatedBug = await Bug.findByIdAndUpdate(
+      originalBug._id,
       { ...updates, updatedAt: new Date() },
       { new: true }
     );
 
     if (updates.status && updates.status !== previousStatus) {
       sendStatusChangeEmail({
-        userId: req.userId,
-        title: bug.title,
+        userId: originalBug.userId,
+        title: updatedBug.title,
         previousStatus,
-        newStatus: bug.status,
+        newStatus: updatedBug.status,
         date: new Date().toLocaleString(),
-      }).catch(err => console.error("Async status change email dispatch failed:", err));
+      }).catch((err) =>
+        console.error("Async status change email dispatch failed:", err.message)
+      );
     }
 
-    res.json(bug);
+    const notes = await InvestigationNote.find({ bugId: updatedBug.bugId })
+      .sort({ createdAt: 1 })
+      .lean();
+
+    const result = {
+      ...updatedBug.toObject(),
+      id: updatedBug.bugId,
+      formId: updatedBug.bugId,
+      type: updatedBug.bugType,
+      investigationNotes: notes.map((n) => ({ ...n, id: n.noteId })),
+    };
+
+    res.json(result);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error("[updateBug] Error:", err.message);
+    res.status(500).json({ error: "Failed to update bug" });
   }
 }
 
-
 export async function deleteBug(req, res) {
   try {
-    const { formId } = req.params;
-    const bug = await FeedbackForm.findOneAndDelete({
-      formId,
-      userId: req.userId,
-    });
+    const { id, formId } = req.params;
+    const identifier = id || formId;
 
+    const bug = await findBugByIdentifier(identifier);
     if (!bug) {
-      return res.status(404).json({ error: "Bug not found" });
+      return res.status(404).json({ error: `Bug with ID "${identifier}" not found` });
     }
 
-    await Submission.deleteMany({ formId: bug._id, userId: req.userId });
+    await Bug.findByIdAndDelete(bug._id);
+    await InvestigationNote.deleteMany({ bugId: bug.bugId });
+    await Submission.deleteMany({ formId: bug._id });
 
-    res.json({ message: "Bug deleted" });
+    res.json({
+      message: "Bug and associated records deleted successfully",
+      bugId: bug.bugId,
+    });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error("[deleteBug] Error:", err.message);
+    res.status(500).json({ error: "Failed to delete bug" });
+  }
+}
+
+export async function getInvestigationNotes(req, res) {
+  try {
+    const { id, formId } = req.params;
+    const identifier = id || formId;
+
+    const bug = await findBugByIdentifier(identifier);
+    if (!bug) {
+      return res.status(404).json({ error: `Bug with ID "${identifier}" not found` });
+    }
+
+    const notes = await InvestigationNote.find({ bugId: bug.bugId })
+      .sort({ createdAt: 1 })
+      .lean();
+
+    res.json(notes.map((n) => ({ ...n, id: n.noteId })));
+  } catch (err) {
+    console.error("[getInvestigationNotes] Error:", err.message);
+    res.status(500).json({ error: "Failed to retrieve investigation notes" });
+  }
+}
+
+export async function addInvestigationNote(req, res) {
+  try {
+    const { id, formId } = req.params;
+    const identifier = id || formId;
+    const { hypothesis, details, suggestedFix, author } = req.body;
+
+    const validationError = validateInvestigationNote({ details });
+    if (validationError) {
+      return res.status(400).json({ error: validationError });
+    }
+
+    const bug = await findBugByIdentifier(identifier);
+    if (!bug) {
+      return res.status(404).json({ error: `Bug with ID "${identifier}" not found` });
+    }
+
+    const count = await InvestigationNote.countDocuments();
+    const noteId = `NOTE-${count + 1}-${Date.now().toString().slice(-4)}`;
+
+    const note = await InvestigationNote.create({
+      noteId,
+      bugId: bug.bugId,
+      bug: bug._id,
+      userId: req.userId || "dev-user",
+      author: (author && author.trim()) || "AI Agent",
+      hypothesis: hypothesis ? hypothesis.trim() : "",
+      details: details.trim(),
+      suggestedFix: suggestedFix ? suggestedFix.trim() : "",
+      timestamp: new Date(),
+    });
+
+    // Touch bug updatedAt
+    await Bug.findByIdAndUpdate(bug._id, { updatedAt: new Date() });
+
+    res.status(201).json({
+      ...note.toObject(),
+      id: note.noteId,
+    });
+  } catch (err) {
+    console.error("[addInvestigationNote] Error:", err.message);
+    res.status(500).json({ error: "Failed to add investigation note" });
   }
 }
 
 export async function getPublicForm(req, res) {
   try {
     const { formId } = req.params;
-    const form = await FeedbackForm.findOne({ formId, isPublic: true });
+    const form = await findBugByIdentifier(formId);
 
-    if (!form) {
-      return res.status(404).json({ error: "Form not found" });
+    if (!form || form.isPublic === false) {
+      return res.status(404).json({ error: "Form not found or is private" });
     }
 
     res.json({
-      formId: form.formId,
+      formId: form.bugId,
       title: form.title,
       description: form.description,
       bugType: form.bugType,
@@ -173,7 +428,8 @@ export async function getPublicForm(req, res) {
       environment: form.environment,
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error("[getPublicForm] Error:", err.message);
+    res.status(500).json({ error: "Failed to load public form" });
   }
 }
 
@@ -193,19 +449,15 @@ export async function submitFeedback(req, res) {
     } = req.body;
 
     if (!bugDescription || !bugDescription.trim()) {
-      return res
-        .status(400)
-        .json({ error: "Bug description is required" });
+      return res.status(400).json({ error: "Bug description is required" });
     }
 
     if (reporterEmail && !isValidEmail(reporterEmail)) {
       return res.status(400).json({ error: "Invalid reporter email" });
     }
 
-    // Only public forms accept anonymous submissions, mirroring getPublicForm.
-    const form = await FeedbackForm.findOne({ formId, isPublic: true });
-
-    if (!form) {
+    const form = await findBugByIdentifier(formId);
+    if (!form || form.isPublic === false) {
       return res.status(404).json({ error: "Form not found or is not public" });
     }
 
@@ -228,21 +480,22 @@ export async function submitFeedback(req, res) {
       status: "New",
     });
 
-    // Fire email notification asynchronously so failures do not block the request
     sendNewBugEmail({
       userId: form.userId,
       title: `${form.title} - ${resolvedBugTitle}`,
       severity: resolvedSeverity,
       description: bugDescription.trim(),
       date: new Date().toLocaleString(),
-    }).catch(err => console.error("Async email dispatch failed:", err));
+    }).catch((err) =>
+      console.error("Async email dispatch failed:", err.message)
+    );
 
     res.status(201).json({
       message: "Feedback submitted successfully",
-      id: submission._id,
+      id: submission._id.toString(),
     });
-
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error("[submitFeedback] Error:", err.message);
+    res.status(500).json({ error: "Failed to submit feedback" });
   }
 }

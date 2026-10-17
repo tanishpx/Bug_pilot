@@ -1,10 +1,22 @@
 // Shared validation / sanitization helpers for the BugPilot API.
 // Kept as pure functions (no DB access) so they are easy to unit-test.
 
-export const BUG_TYPES = ["UI", "Runtime", "Performance", "Security", "API", "Other"];
+export const BUG_TYPES = [
+  "UI",
+  "Backend",
+  "Performance",
+  "Security",
+  "Database",
+  "Runtime",
+  "API",
+  "Other",
+];
+
 export const SEVERITIES = ["Low", "Medium", "High", "Critical"];
 export const PRIORITIES = ["P0", "P1", "P2", "P3"];
+
 export const BUG_STATUSES = [
+  "New",
   "Open",
   "Triaged",
   "Assigned",
@@ -14,11 +26,11 @@ export const BUG_STATUSES = [
   "Retest",
   "Closed",
   "Reopened",
+  "Accepted",
+  "Rejected",
 ];
 
-// Only these fields may be changed through PUT /api/bugs/:formId.
-// Everything else in the request body (userId, formId, _id, resolvedAt,
-// createdAt, ...) is ignored to prevent mass-assignment.
+// Fields that can be created/updated on a Bug document
 export const UPDATABLE_BUG_FIELDS = [
   "title",
   "description",
@@ -28,7 +40,12 @@ export const UPDATABLE_BUG_FIELDS = [
   "status",
   "assignee",
   "reporter",
+  "reporterEmail",
   "environment",
+  "stepsToReproduce",
+  "logs",
+  "relatedFiles",
+  "attachments",
   "tags",
   "isPublic",
 ];
@@ -40,15 +57,20 @@ export function pickBugUpdates(body = {}) {
       updates[field] = body[field];
     }
   }
+  // Support both 'type' and 'bugType' from callers
+  if (body.type !== undefined && updates.bugType === undefined) {
+    updates.bugType = body.type;
+  }
   return updates;
 }
 
-// Returns an error message string when the fields are invalid, else null.
+// Returns an error message string when fields are invalid, else null.
 export function validateBugFields(fields = {}) {
   if (fields.title !== undefined && !String(fields.title).trim()) {
     return "Title is required";
   }
-  if (fields.bugType !== undefined && !BUG_TYPES.includes(fields.bugType)) {
+  const effectiveType = fields.bugType || fields.type;
+  if (effectiveType !== undefined && !BUG_TYPES.includes(effectiveType)) {
     return `Invalid bugType. Must be one of: ${BUG_TYPES.join(", ")}`;
   }
   if (fields.severity !== undefined && !SEVERITIES.includes(fields.severity)) {
@@ -61,19 +83,33 @@ export function validateBugFields(fields = {}) {
     return `Invalid status. Must be one of: ${BUG_STATUSES.join(", ")}`;
   }
   if (fields.tags !== undefined && !Array.isArray(fields.tags)) {
-    return "Tags must be an array";
+    return "Tags must be an array of strings";
+  }
+  if (fields.attachments !== undefined && !Array.isArray(fields.attachments)) {
+    return "Attachments must be an array";
+  }
+  if (fields.relatedFiles !== undefined && !Array.isArray(fields.relatedFiles)) {
+    return "Related files must be an array of paths";
+  }
+  if (fields.reporterEmail && !isValidEmail(fields.reporterEmail)) {
+    return "Invalid reporter email address";
   }
   return null;
 }
 
-// Escape special regex characters so user search input cannot break or
-// slow down the MongoDB $regex query.
+export function validateInvestigationNote(body = {}) {
+  if (!body.details || !String(body.details).trim()) {
+    return "Note details/findings are required";
+  }
+  return null;
+}
+
+// Escape special regex characters so user search input cannot break or slow down MongoDB regex
 export function escapeRegExp(value) {
   return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-// Escape HTML so user-controlled values cannot inject markup into the
-// notification emails (which are sent as HTML).
+// Escape HTML so user-controlled values cannot inject markup into notification emails
 export function escapeHtml(value) {
   return String(value ?? "")
     .replace(/&/g, "&amp;")

@@ -8,7 +8,7 @@ function getUserId(): string {
 
   let devId = localStorage.getItem("bugpilot-dev-user-id");
   if (!devId) {
-    devId = "dev-" + Math.random().toString(36).slice(2, 10);
+    devId = "dev-user";
     localStorage.setItem("bugpilot-dev-user-id", devId);
   }
   return devId;
@@ -42,18 +42,27 @@ export interface BugFilters {
   priority?: string;
   bugType?: string;
   search?: string;
+  reporter?: string;
 }
 
 export interface CreateBugPayload {
   title: string;
   description?: string;
   bugType?: string;
+  type?: string;
   severity?: string;
   priority?: string;
+  status?: string;
   assignee?: string;
   reporter?: string;
+  reporterEmail?: string;
   environment?: string;
+  stepsToReproduce?: string;
+  logs?: string;
+  relatedFiles?: string[];
+  attachments?: string[];
   tags?: string[];
+  isPublic?: boolean;
 }
 
 export interface SubmitFeedbackPayload {
@@ -78,20 +87,40 @@ export interface PublicForm {
   environment?: string;
 }
 
+export interface InvestigationNoteItem {
+  id: string;
+  noteId?: string;
+  bugId: string;
+  author: string;
+  hypothesis?: string;
+  details: string;
+  suggestedFix?: string;
+  timestamp: string;
+}
+
 export interface Bug {
   _id: string;
+  id?: string;
+  bugId?: string;
   formId: string;
   title: string;
   description: string;
   bugType: string;
+  type?: string;
   severity: string;
   priority: string;
   status: string;
   assignee: string;
   reporter: string;
+  reporterEmail?: string;
   environment: string;
+  stepsToReproduce?: string;
+  logs?: string;
+  relatedFiles?: string[];
+  attachments?: string[];
   tags: string[];
   isPublic: boolean;
+  investigationNotes?: InvestigationNoteItem[];
   createdAt: string;
   updatedAt: string;
   resolvedAt?: string | null;
@@ -164,9 +193,14 @@ export async function getBugs(filters?: BugFilters): Promise<Bug[]> {
   if (filters?.priority) params.set("priority", filters.priority);
   if (filters?.bugType) params.set("bugType", filters.bugType);
   if (filters?.search) params.set("search", filters.search);
+  if (filters?.reporter) params.set("reporter", filters.reporter);
 
   const query = params.toString();
   return request<Bug[]>(`/bugs${query ? `?${query}` : ""}`);
+}
+
+export async function getBug(id: string): Promise<Bug> {
+  return request<Bug>(`/bugs/${encodeURIComponent(id)}`);
 }
 
 export async function createBug(data: CreateBugPayload): Promise<Bug> {
@@ -179,10 +213,10 @@ export async function createBug(data: CreateBugPayload): Promise<Bug> {
 }
 
 export async function updateBug(
-  formId: string,
+  id: string,
   data: Partial<Bug>
 ): Promise<Bug> {
-  const bug = await request<Bug>(`/bugs/${formId}`, {
+  const bug = await request<Bug>(`/bugs/${encodeURIComponent(id)}`, {
     method: "PUT",
     body: JSON.stringify(data),
   });
@@ -190,28 +224,54 @@ export async function updateBug(
   return bug;
 }
 
-export async function deleteBug(formId: string): Promise<void> {
-  await request(`/bugs/${formId}`, { method: "DELETE" });
+export async function deleteBug(id: string): Promise<void> {
+  await request(`/bugs/${encodeURIComponent(id)}`, { method: "DELETE" });
   window.dispatchEvent(new Event("bugpilot:bugs-changed"));
 }
 
+export async function getInvestigationNotes(
+  bugId: string
+): Promise<InvestigationNoteItem[]> {
+  return request<InvestigationNoteItem[]>(
+    `/bugs/${encodeURIComponent(bugId)}/notes`
+  );
+}
+
+export async function addInvestigationNote(
+  bugId: string,
+  data: {
+    details: string;
+    hypothesis?: string;
+    suggestedFix?: string;
+    author?: string;
+  }
+): Promise<InvestigationNoteItem> {
+  const note = await request<InvestigationNoteItem>(
+    `/bugs/${encodeURIComponent(bugId)}/notes`,
+    {
+      method: "POST",
+      body: JSON.stringify(data),
+    }
+  );
+  window.dispatchEvent(new Event("bugpilot:bugs-changed"));
+  return note;
+}
+
 export async function getPublicForm(formId: string): Promise<PublicForm> {
-  return request<PublicForm>(`/bugs/public/${formId}`);
+  return request<PublicForm>(`/bugs/public/${encodeURIComponent(formId)}`);
 }
 
 export async function submitFeedback(
   formId: string,
   data: SubmitFeedbackPayload
 ): Promise<{ message: string; id: string }> {
-  return request(`/bugs/public/${formId}/submit`, {
+  return request(`/bugs/public/${encodeURIComponent(formId)}/submit`, {
     method: "POST",
     body: JSON.stringify(data),
   });
 }
 
-export async function getSubmissions(
-  status?: string
-): Promise<Submission[]> {
+export async function getSubmissions(status?: string): Promise<Submission[]> {
   const query = status ? `?status=${status}` : "";
   return request<Submission[]>(`/submissions${query}`);
 }
@@ -220,7 +280,7 @@ export async function updateSubmission(
   id: string,
   status: string
 ): Promise<Submission> {
-  return request<Submission>(`/submissions/${id}`, {
+  return request<Submission>(`/submissions/${encodeURIComponent(id)}`, {
     method: "PUT",
     body: JSON.stringify({ status }),
   });
@@ -240,7 +300,9 @@ export async function getSettings(): Promise<SettingsPayload> {
   return request<SettingsPayload>("/settings");
 }
 
-export async function updateSettings(data: SettingsPayload): Promise<SettingsPayload> {
+export async function updateSettings(
+  data: SettingsPayload
+): Promise<SettingsPayload> {
   return request<SettingsPayload>("/settings", {
     method: "PUT",
     body: JSON.stringify(data),
@@ -251,7 +313,9 @@ export async function getStats(): Promise<Stats> {
   return request<Stats>("/stats");
 }
 
-export async function getInsights(filters: InsightsFilters = {}): Promise<Insights> {
+export async function getInsights(
+  filters: InsightsFilters = {}
+): Promise<Insights> {
   const params = new URLSearchParams();
   if (filters.dateRange) params.set("dateRange", filters.dateRange);
   if (filters.status) params.set("status", filters.status);
@@ -260,4 +324,3 @@ export async function getInsights(filters: InsightsFilters = {}): Promise<Insigh
   const query = params.toString();
   return request<Insights>(`/insights${query ? `?${query}` : ""}`);
 }
-

@@ -9,7 +9,12 @@
     "dev:server": "node server/index.js",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "migrate": "node server/scripts/migrate.js",
+    "db:migrate": "node server/scripts/migrate.js",
+    "seed": "node server/scripts/seed.js",
+    "db:seed": "node server/scripts/seed.js",
+    "test": "node --test test/bugs.test.js"
   },
   "dependencies": {
     "cors": "^2.8.5",

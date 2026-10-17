@@ -6,9 +6,11 @@ Standalone Model Context Protocol (MCP) server that empowers AI assistants to un
 
 ## 🎯 Purpose & Design
 
-- **Isolated & Standalone**: Operates independently in `mcp-server/` with its own dependencies and mock/in-memory data store. It does **not** alter or depend on the main Bug Pilot MongoDB/Express backend for now.
+- **Database-Backed & Live**: Operates on live MongoDB database records and/or live REST API endpoints. No dependence on static sample bugs at runtime.
 - **AI-Optimized Context**: Returns bug reports structured specifically for debugging agents, including reproduction steps, stack traces, hypotheses, and diagnostic checklists.
-- **Plug-and-Play Bridge for Later**: Features a clean `IBugDataSource` abstraction so you can switch from standalone mode to live Bug Pilot API (`http://localhost:3001/api`) with a single environment flag whenever you're ready.
+- **Flexible Data Source Architecture**: Features a clean `IBugDataSource` interface with support for:
+  - `DatabaseBugDataSource`: Queries MongoDB directly (`DATA_SOURCE_MODE=database`)
+  - `BugPilotApiDataSource`: Queries Bug Pilot REST API endpoints (`DATA_SOURCE_MODE=bugpilot_api`)
 
 ---
 

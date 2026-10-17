@@ -5,7 +5,16 @@ export const createBugSchema = {
   title: z.string().describe('Short descriptive title of the bug'),
   description: z.string().describe('Detailed explanation of what went wrong'),
   type: z
-    .enum(['UI', 'Backend', 'Performance', 'Security', 'Database', 'Other'])
+    .enum([
+      'UI',
+      'Backend',
+      'Performance',
+      'Security',
+      'Database',
+      'Runtime',
+      'API',
+      'Other',
+    ])
     .optional()
     .default('UI')
     .describe('Category of bug'),

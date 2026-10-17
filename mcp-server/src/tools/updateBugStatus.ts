@@ -4,7 +4,20 @@ import { IBugDataSource } from '../data/storage.js';
 export const updateBugStatusSchema = {
   bugId: z.string().describe('ID of the bug report (e.g. BUG-101)'),
   status: z
-    .enum(['New', 'Reviewed', 'Accepted', 'Rejected', 'In Progress', 'Resolved'])
+    .enum([
+      'New',
+      'Open',
+      'Triaged',
+      'Assigned',
+      'In Progress',
+      'Resolved',
+      'Fixed',
+      'Retest',
+      'Closed',
+      'Reopened',
+      'Accepted',
+      'Rejected',
+    ])
     .describe('New status for the bug'),
 };
 
