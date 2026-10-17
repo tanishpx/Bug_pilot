@@ -3,7 +3,20 @@ import { IBugDataSource } from '../data/storage.js';
 
 export const listBugsSchema = {
   status: z
-    .enum(['New', 'Reviewed', 'Accepted', 'Rejected', 'In Progress', 'Resolved'])
+    .enum([
+      'New',
+      'Open',
+      'Triaged',
+      'Assigned',
+      'In Progress',
+      'Resolved',
+      'Fixed',
+      'Retest',
+      'Closed',
+      'Reopened',
+      'Accepted',
+      'Rejected',
+    ])
     .optional()
     .describe('Filter bugs by lifecycle status'),
   severity: z
@@ -11,7 +24,16 @@ export const listBugsSchema = {
     .optional()
     .describe('Filter bugs by severity level'),
   type: z
-    .enum(['UI', 'Backend', 'Performance', 'Security', 'Database', 'Other'])
+    .enum([
+      'UI',
+      'Backend',
+      'Performance',
+      'Security',
+      'Database',
+      'Runtime',
+      'API',
+      'Other',
+    ])
     .optional()
     .describe('Filter bugs by category/type'),
   search: z

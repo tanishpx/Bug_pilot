@@ -1,6 +1,26 @@
 export type BugSeverity = 'Low' | 'Medium' | 'High' | 'Critical';
-export type BugStatus = 'New' | 'Reviewed' | 'Accepted' | 'Rejected' | 'In Progress' | 'Resolved';
-export type BugType = 'UI' | 'Backend' | 'Performance' | 'Security' | 'Database' | 'Other';
+export type BugStatus =
+  | 'New'
+  | 'Open'
+  | 'Triaged'
+  | 'Assigned'
+  | 'In Progress'
+  | 'Resolved'
+  | 'Fixed'
+  | 'Retest'
+  | 'Closed'
+  | 'Reopened'
+  | 'Accepted'
+  | 'Rejected';
+export type BugType =
+  | 'UI'
+  | 'Backend'
+  | 'Performance'
+  | 'Security'
+  | 'Database'
+  | 'Runtime'
+  | 'API'
+  | 'Other';
 
 export interface InvestigationNote {
   id: string;
