@@ -51,10 +51,12 @@ export default function BugDashboard() {
   const [newBugDraft, setNewBugDraft] = useState<CreateBugPayload>(emptyNewBug);
   const [newBugTagsInput, setNewBugTagsInput] = useState("");
   const [submittingNewBug, setSubmittingNewBug] = useState(false);
+  const [createBugError, setCreateBugError] = useState<string | null>(null);
 
   const [editingBug, setEditingBug] = useState<Bug | null>(null);
   const [editTagInput, setEditTagInput] = useState("");
   const [savingEdit, setSavingEdit] = useState(false);
+  const [editBugError, setEditBugError] = useState<string | null>(null);
 
   const [activeBug, setActiveBug] = useState<Bug | null>(null);
 
@@ -121,7 +123,13 @@ export default function BugDashboard() {
 
   const handleCreateBug = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newBugDraft.title.trim() || submittingNewBug) return;
+    setCreateBugError(null);
+    if (!newBugDraft.title.trim() || submittingNewBug) {
+      if (!newBugDraft.title.trim()) {
+        setCreateBugError("Please enter a bug title.");
+      }
+      return;
+    }
 
     setSubmittingNewBug(true);
     try {
@@ -130,8 +138,11 @@ export default function BugDashboard() {
         .map((t) => t.trim())
         .filter(Boolean);
 
+      // Strip any accidental ID so backend assigns a unique sequential ID
+      const { id: _id, formId: _formId, bugId: _bugId, ...cleanPayload } = newBugDraft as any;
+
       const created = await createBug({
-        ...newBugDraft,
+        ...cleanPayload,
         title: newBugDraft.title.trim(),
         description: newBugDraft.description?.trim() || "",
         assignee: newBugDraft.assignee?.trim() || "Unassigned",
@@ -146,9 +157,11 @@ export default function BugDashboard() {
       setCreatingBug(false);
       setNewBugDraft(emptyNewBug);
       setNewBugTagsInput("");
+      setCreateBugError(null);
     } catch (err) {
       console.error("Failed to create bug in database:", err);
-      alert("Failed to create bug. Please check server logs.");
+      const msg = err instanceof Error ? err.message : "Failed to create bug. Please check inputs.";
+      setCreateBugError(msg);
     } finally {
       setSubmittingNewBug(false);
     }
@@ -157,10 +170,12 @@ export default function BugDashboard() {
   const startEditing = (bug: Bug) => {
     setEditingBug({ ...bug });
     setEditTagInput((bug.tags || []).join(", "));
+    setEditBugError(null);
   };
 
   const handleSaveEdit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setEditBugError(null);
     if (!editingBug || !editingBug.title.trim() || savingEdit) return;
 
     const identifier = editingBug.bugId || editingBug.formId || editingBug.id || editingBug._id;
@@ -194,8 +209,11 @@ export default function BugDashboard() {
         setActiveBug(updated);
       }
       setEditingBug(null);
+      setEditBugError(null);
     } catch (err) {
       console.error("Failed to update bug:", err);
+      const msg = err instanceof Error ? err.message : "Failed to update bug. Please check inputs.";
+      setEditBugError(msg);
     } finally {
       setSavingEdit(false);
     }
@@ -647,6 +665,26 @@ export default function BugDashboard() {
             <span className="eyebrow">Database Record</span>
             <h2 style={{ marginBottom: "16px" }}>File New Bug Report</h2>
 
+            {createBugError && (
+              <div
+                style={{
+                  padding: "10px 14px",
+                  borderRadius: "var(--radius-sm)",
+                  background: "rgba(220, 38, 38, 0.08)",
+                  border: "1px solid var(--danger)",
+                  color: "var(--danger)",
+                  fontSize: "13px",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
+                  marginBottom: "8px",
+                }}
+              >
+                <i className="fa-solid fa-circle-exclamation" aria-hidden="true" />
+                <span>{createBugError}</span>
+              </div>
+            )}
+
             <form onSubmit={handleCreateBug} style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
               <label>
                 <span style={{ fontWeight: 600, fontSize: "13px" }}>Title *</span>
@@ -775,9 +813,9 @@ export default function BugDashboard() {
                 </label>
 
                 <label>
-                  <span style={{ fontWeight: 600, fontSize: "13px" }}>Reporter Email</span>
+                  <span style={{ fontWeight: 600, fontSize: "13px" }}>Reporter Email / Name</span>
                   <input
-                    type="email"
+                    type="text"
                     value={newBugDraft.reporterEmail || ""}
                     onChange={(e) =>
                       setNewBugDraft({
@@ -785,7 +823,7 @@ export default function BugDashboard() {
                         reporterEmail: e.target.value,
                       })
                     }
-                    placeholder="reporter@example.com"
+                    placeholder="reporter@example.com or user handle"
                   />
                 </label>
               </div>
@@ -1129,6 +1167,26 @@ export default function BugDashboard() {
             </button>
             <span className="eyebrow">{editingBug.bugId || editingBug.formId || editingBug.id}</span>
             <h2 style={{ marginBottom: "16px" }}>Edit Bug Details</h2>
+
+            {editBugError && (
+              <div
+                style={{
+                  padding: "10px 14px",
+                  borderRadius: "var(--radius-sm)",
+                  background: "rgba(220, 38, 38, 0.08)",
+                  border: "1px solid var(--danger)",
+                  color: "var(--danger)",
+                  fontSize: "13px",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
+                  marginBottom: "8px",
+                }}
+              >
+                <i className="fa-solid fa-circle-exclamation" aria-hidden="true" />
+                <span>{editBugError}</span>
+              </div>
+            )}
 
             <form onSubmit={handleSaveEdit} style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
               <label>

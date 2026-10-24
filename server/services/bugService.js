@@ -5,6 +5,7 @@ import Submission from "../models/Submission.js";
 import { sendStatusChangeEmail } from "./emailService.js";
 import {
   escapeRegExp,
+  isValidEmail,
   pickBugUpdates,
   validateBugFields,
   validateInvestigationNote,
@@ -151,6 +152,32 @@ export async function getBug(identifier) {
   return formatBug(bug, notes);
 }
 
+// Generates next available sequential BUG-X identifier without colliding with existing documents
+async function getNextBugId() {
+  const bugs = await Bug.find({ bugId: /^BUG-\d+$/ })
+    .sort({ createdAt: -1 })
+    .limit(50)
+    .lean();
+
+  let maxNum = 100;
+  for (const b of bugs) {
+    const match = b.bugId?.match(/^BUG-(\d+)$/);
+    if (match) {
+      const num = parseInt(match[1], 10);
+      if (num > maxNum && num < 10000000) {
+        maxNum = num;
+      }
+    }
+  }
+
+  let candidate = `BUG-${maxNum + 1}`;
+  while (await Bug.exists({ bugId: candidate })) {
+    maxNum++;
+    candidate = `BUG-${maxNum + 1}`;
+  }
+  return candidate;
+}
+
 export async function createBug(input = {}, userId = "dev-user") {
   const {
     title,
@@ -179,6 +206,18 @@ export async function createBug(input = {}, userId = "dev-user") {
   }
 
   const effectiveType = bugType || type || "UI";
+
+  let cleanReporterEmail = reporterEmail ? String(reporterEmail).trim() : "";
+  let cleanReporter = reporter ? String(reporter).trim() : "";
+
+  // If user entered a username/handle/name in reporterEmail, use it as reporter
+  if (cleanReporterEmail && !isValidEmail(cleanReporterEmail)) {
+    if (!cleanReporter) {
+      cleanReporter = cleanReporterEmail;
+    }
+    cleanReporterEmail = "";
+  }
+
   const validationError = validateBugFields({
     title,
     bugType: effectiveType,
@@ -188,24 +227,17 @@ export async function createBug(input = {}, userId = "dev-user") {
     tags,
     attachments,
     relatedFiles,
-    reporterEmail,
+    reporterEmail: cleanReporterEmail,
   });
 
   if (validationError) {
     fail(400, validationError);
   }
 
-  // Determine unique bug ID (custom, BUG-sequential, or timestamp-based)
-  let assignedBugId = bugId || id;
-  if (!assignedBugId) {
-    const count = await Bug.countDocuments();
-    assignedBugId = `BUG-${count + 101}`;
-  }
-
-  // Ensure uniqueness if collision occurs
-  const existing = await Bug.findOne({ bugId: assignedBugId });
-  if (existing) {
-    assignedBugId = `BUG-${Date.now()}`;
+  // Determine unique bug ID safely
+  let assignedBugId = (bugId || id || "").trim();
+  if (!assignedBugId || (await Bug.exists({ bugId: assignedBugId }))) {
+    assignedBugId = await getNextBugId();
   }
 
   const bug = await Bug.create({
@@ -219,8 +251,8 @@ export async function createBug(input = {}, userId = "dev-user") {
     priority: priority || "P2",
     status: status || "New",
     assignee: (assignee && assignee.trim()) || "Unassigned",
-    reporter: (reporter && reporter.trim()) || reporterEmail || "",
-    reporterEmail: (reporterEmail && reporterEmail.trim()) || "",
+    reporter: cleanReporter || cleanReporterEmail || "",
+    reporterEmail: cleanReporterEmail,
     environment: environment ? environment.trim() : "",
     stepsToReproduce: stepsToReproduce ? stepsToReproduce.trim() : "",
     logs: logs ? logs.trim() : "",
