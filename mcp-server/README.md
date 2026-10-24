@@ -6,11 +6,9 @@ Standalone Model Context Protocol (MCP) server that empowers AI assistants to un
 
 ## 🎯 Purpose & Design
 
-- **Database-Backed & Live**: Operates on live MongoDB database records and/or live REST API endpoints. No dependence on static sample bugs at runtime.
+- **API-Backed & Live**: Operates on live Bug Pilot REST API records. The API owns the database, validation, lifecycle transitions, and persistence; the MCP server owns only the AI-facing interface.
 - **AI-Optimized Context**: Returns bug reports structured specifically for debugging agents, including reproduction steps, stack traces, hypotheses, and diagnostic checklists.
-- **Flexible Data Source Architecture**: Features a clean `IBugDataSource` interface with support for:
-  - `DatabaseBugDataSource`: Queries MongoDB directly (`DATA_SOURCE_MODE=database`)
-  - `BugPilotApiDataSource`: Queries Bug Pilot REST API endpoints (`DATA_SOURCE_MODE=bugpilot_api`)
+- **Single Bug Module**: The MCP server implements `IBugDataSource` with `BugPilotApiDataSource`, a client of the Express API. It has no Mongoose schema and no direct MongoDB connection, so the API's rules cannot be bypassed.
 
 ---
 
@@ -20,11 +18,13 @@ Standalone Model Context Protocol (MCP) server that empowers AI assistants to un
 mcp-server/
 ├── src/
 │   ├── index.ts                     # Main entrypoint; registers tools, resources, prompts & stdio transport
+│   ├── config/
+│   │   └── env.ts                   # Deterministic .env loading from any working directory
 │   ├── types/
 │   │   └── bug.ts                   # Types: BugReport, BugSeverity, BugStatus, InvestigationNote, etc.
 │   ├── data/
 │   │   ├── sample-bugs.json         # Realistic initial bug datasets (UI crash, auth 500, database timeout)
-│   │   └── storage.ts               # IBugDataSource interface, StandaloneBugDataSource, & Api stub
+│   │   └── storage.ts               # IBugDataSource + BugPilotApiDataSource (REST client)
 │   ├── tools/
 │   │   ├── getBugContext.ts         # `get_bug_context`: Returns rich, AI-optimized debugging context
 │   │   ├── listBugs.ts              # `list_bugs`: Filter by status, severity, type, or search term
@@ -71,16 +71,30 @@ mcp-server/
 ```bash
 cd mcp-server
 npm install
+cp .env.example .env
 npm run build
 ```
 
+`BUG_PILOT_API_URL` defaults to `http://localhost:3001/api`, so `.env` is optional
+when the API runs on the default port.
+
 ### 2. Run Standalone Tests
+
+Start the Bug Pilot API first (from the repository root: `npm run dev:server`).
+The MCP server is an API client, so the API must be reachable.
 
 Verify that the MCP server starts, connects via stdio, and responds to all tool calls:
 
 ```bash
 npm test
 ```
+
+The verification asserts and exits non-zero on failure; it does not just print
+diagnostics. It creates a temporary bug through the MCP tool, reads it back
+through every tool, resource, and prompt, compares the registered catalog to
+`mcp.manifest.json`, rejects unknown IDs and invalid input, checks that startup
+fails fast against an unreachable API, and deletes the fixture through the REST
+seam. A failed cleanup fails the run.
 
 ### 3. Development Mode
 
@@ -107,7 +121,8 @@ To use this MCP server with your AI assistant (e.g., Claude Desktop, Antigravity
         "/home/tanish4181/Projects/Bug_Pilot/mcp-server/dist/index.js"
       ],
       "env": {
-        "DATA_SOURCE_MODE": "standalone"
+        "BUG_PILOT_API_URL": "http://localhost:3001/api",
+        "BUG_PILOT_USER_ID": "your-admin-user-id"
       }
     }
   }
@@ -116,18 +131,25 @@ To use this MCP server with your AI assistant (e.g., Claude Desktop, Antigravity
 
 ---
 
-## 🔗 Blueprint for Connecting to the Main Project Later
+## 🔗 Architecture: the API is the Bug module
 
-When you are ready to connect this MCP server to the live Bug Pilot Express API or MongoDB database:
+The MCP server does not talk to MongoDB. It calls the Express API, which is the
+single owner of Bug validation, identifier lookup, lifecycle transitions,
+investigation notes, and persistence. This means:
 
-1. **Update `.env`**:
-   ```env
-   DATA_SOURCE_MODE=bugpilot_api
-   BUG_PILOT_API_URL=http://localhost:3001/api
-   ```
-2. **Implement `BugPilotApiDataSource` in `src/data/storage.ts`**:
-   - `getAll()` ➔ `fetch(`${this.apiUrl}/submissions`)`
-   - `getById(id)` ➔ `fetch(`${this.apiUrl}/submissions/${id}`)`
-   - `updateStatus(id, status)` ➔ `fetch(`${this.apiUrl}/submissions/${id}/status`, { method: 'PATCH', ... })`
-   - `addInvestigationNote(input)` ➔ `fetch(`${this.apiUrl}/submissions/${input.bugId}/notes`, { method: 'POST', ... })`
-3. Everything else (tools, prompts, AI schemas) will continue working seamlessly without any changes to the AI client interface.
+- `BUG_PILOT_API_URL` must point at a running API (default `http://localhost:3001/api`).
+- The MCP server fails fast at startup if the API is unreachable.
+- MCP-originated requests carry `X-MCP-Agent: bug-pilot-mcp`; the API can reject
+  them when the admin disables MCP in **Settings → AI Assistant (MCP)**.
+- No `MONGODB_URI` or `DATA_SOURCE_MODE` is needed in the MCP client environment.
+
+### API contract used by the client
+
+| Method | Endpoint | Purpose |
+|--------|----------|---------|
+| `GET` | `/bugs` | List/search bugs |
+| `GET` | `/bugs/:id` | Fetch one bug with investigation notes |
+| `POST` | `/bugs` | Create a bug |
+| `PUT` | `/bugs/:id` | Update status or fields |
+| `POST` | `/bugs/:id/notes` | Append an investigation note |
+| `DELETE` | `/bugs/:id` | Delete a verification fixture |

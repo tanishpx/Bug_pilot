@@ -286,7 +286,42 @@ export async function updateSubmission(
   });
 }
 
-export interface SettingsPayload {
+export interface McpCapability {
+  name: string;
+  title?: string;
+  description: string;
+  uri?: string;
+  writes?: boolean;
+}
+
+export interface McpStatus {
+  enabled: boolean;
+  transport: string;
+  dataSourceMode: string;
+  database: "connected" | "disconnected";
+  server: {
+    path: string;
+    built: boolean;
+    command: string;
+  };
+  clientConfig: {
+    mcpServers: Record<
+      string,
+      {
+        command: string;
+        args: string[];
+        env: Record<string, string>;
+      }
+    >;
+  };
+  capabilities: {
+    tools: McpCapability[];
+    resources: McpCapability[];
+    prompts: McpCapability[];
+  };
+}
+
+export interface SettingsValues {
   newBugNotifications: boolean;
   statusChangeNotifications: boolean;
   notificationEmail: string;
@@ -294,6 +329,12 @@ export interface SettingsPayload {
   supportEmail: string;
   theme: "Light" | "Dark" | "System";
   primaryColor: string;
+  mcpEnabled: boolean;
+}
+
+export interface SettingsPayload {
+  settings: SettingsValues;
+  mcp: McpStatus;
 }
 
 export async function getSettings(): Promise<SettingsPayload> {
@@ -301,7 +342,7 @@ export async function getSettings(): Promise<SettingsPayload> {
 }
 
 export async function updateSettings(
-  data: SettingsPayload
+  data: Partial<SettingsValues>
 ): Promise<SettingsPayload> {
   return request<SettingsPayload>("/settings", {
     method: "PUT",

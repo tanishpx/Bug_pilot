@@ -1,6 +1,11 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { getSession, logout } from "../../lib/auth";
 import { useTheme } from "../../lib/theme";
+import {
+  getSettings,
+  updateSettings,
+  type SettingsPayload,
+} from "../../lib/api";
 
 const ADMIN_EMAILS = [
   {
@@ -18,14 +23,40 @@ const ADMIN_EMAILS = [
 export default function Settings() {
   const { dark, toggle } = useTheme();
   const sessionUser = getSession();
-  const [copiedEmail, setCopiedEmail] = useState<string | null>(null);
+  const [copied, setCopied] = useState<string | null>(null);
+
+  const [workspace, setWorkspace] = useState<SettingsPayload | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [savingMcp, setSavingMcp] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const currentUserEmail = sessionUser?.email || "Tanish4181@gmail.com";
 
-  const handleCopy = (email: string) => {
-    navigator.clipboard.writeText(email);
-    setCopiedEmail(email);
-    setTimeout(() => setCopiedEmail(null), 2000);
+  useEffect(() => {
+    let active = true;
+
+    getSettings()
+      .then((data) => {
+        if (active) setWorkspace(data);
+      })
+      .catch((err) => {
+        if (active) {
+          setError(err instanceof Error ? err.message : "Unable to load workspace settings.");
+        }
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const handleCopy = (value: string, key: string) => {
+    navigator.clipboard.writeText(value);
+    setCopied(key);
+    setTimeout(() => setCopied(null), 2000);
   };
 
   const handleSignOut = async () => {
@@ -35,13 +66,33 @@ export default function Settings() {
     }
   };
 
+  const mcp = workspace?.mcp ?? null;
+  const mcpEnabled = workspace?.settings.mcpEnabled ?? true;
+  const mcpConfig = mcp ? JSON.stringify(mcp.clientConfig, null, 2) : "";
+
+  const handleToggleMcp = async () => {
+    if (!workspace || savingMcp) return;
+
+    setSavingMcp(true);
+    setError(null);
+
+    try {
+      const updated = await updateSettings({ mcpEnabled: !mcpEnabled });
+      setWorkspace(updated);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to update MCP access.");
+    } finally {
+      setSavingMcp(false);
+    }
+  };
+
   return (
     <>
       {/* Header */}
       <div className="admin-head">
         <div>
           <h1>Settings</h1>
-          <p>View your profile, administrator accounts, theme preferences, and session controls.</p>
+          <p>View your profile, administrator accounts, AI assistant access, theme preferences, and session controls.</p>
         </div>
       </div>
 
@@ -67,10 +118,10 @@ export default function Settings() {
                 <button
                   type="button"
                   className="simple-copy-btn"
-                  onClick={() => handleCopy(currentUserEmail)}
+                  onClick={() => handleCopy(currentUserEmail, "profile")}
                   title="Copy email address"
                 >
-                  {copiedEmail === currentUserEmail ? "✓ Copied" : "Copy"}
+                  {copied === "profile" ? "✓ Copied" : "Copy"}
                 </button>
               </div>
               <span className="simple-role-tag">
@@ -103,7 +154,7 @@ export default function Settings() {
                 <div className="simple-admin-info">
                   <div className="simple-admin-top">
                     <h4>{admin.name}</h4>
-                    <span className="badge" style={{ background: "var(--primary-subtle)", color: "var(--primary)", fontSize: "11px" }}>
+                    <span className="badge simple-role-badge">
                       {admin.role}
                     </span>
                   </div>
@@ -112,10 +163,10 @@ export default function Settings() {
                     <button
                       type="button"
                       className="simple-copy-btn"
-                      onClick={() => handleCopy(admin.email)}
+                      onClick={() => handleCopy(admin.email, admin.email)}
                       title="Copy administrator email"
                     >
-                      {copiedEmail === admin.email ? "✓ Copied" : "Copy"}
+                      {copied === admin.email ? "✓ Copied" : "Copy"}
                     </button>
                   </div>
                 </div>
@@ -124,15 +175,139 @@ export default function Settings() {
           </div>
         </div>
 
-        {/* 3. Dark and Light Mode Switch */}
+        {/* 3. AI Assistant / MCP Integration */}
+        <div className="simple-settings-card">
+          <div className="simple-card-header">
+            <div className="simple-card-title">
+              <i className="fa-solid fa-robot"></i>
+              <h3>AI Assistant (MCP)</h3>
+            </div>
+            <div className="simple-mcp-head-actions">
+              <span className={`simple-mcp-state ${mcpEnabled ? "on" : "off"}`}>
+                <i className={`fa-solid ${mcpEnabled ? "fa-circle-check" : "fa-circle-pause"}`}></i>
+                {mcpEnabled ? "Enabled" : "Disabled"}
+              </span>
+              <button
+                type="button"
+                className={`simple-switch ${mcpEnabled ? "on" : ""}`}
+                onClick={handleToggleMcp}
+                disabled={!workspace || savingMcp}
+                aria-pressed={mcpEnabled}
+                aria-label="Toggle MCP access"
+                title={workspace ? "Toggle MCP access" : "Settings are unavailable"}
+              >
+                <span className="simple-switch-knob" />
+              </button>
+            </div>
+          </div>
+
+          <p className="simple-desc">
+            Connect Claude Desktop, Cursor, Windsurf, or another MCP client to Bug Pilot. The assistant
+            can search bugs, read full diagnostics, file reports, record hypotheses, and update statuses.
+          </p>
+
+          {error && (
+            <div className="simple-mcp-warning">
+              <i className="fa-solid fa-triangle-exclamation"></i>
+              <span>{error}</span>
+            </div>
+          )}
+
+          {loading ? (
+            <p className="simple-desc">Checking MCP status…</p>
+          ) : mcp ? (
+            <>
+              <div className="simple-mcp-grid">
+                <div className="simple-mcp-stat">
+                  <span className="simple-label">Server build</span>
+                  <strong className={mcp.server.built ? "ok" : "warn"}>
+                    {mcp.server.built ? "Ready" : "Not built"}
+                  </strong>
+                </div>
+                <div className="simple-mcp-stat">
+                  <span className="simple-label">Database</span>
+                  <strong className={mcp.database === "connected" ? "ok" : "warn"}>
+                    {mcp.database === "connected" ? "Connected" : "Disconnected"}
+                  </strong>
+                </div>
+                <div className="simple-mcp-stat">
+                  <span className="simple-label">Transport</span>
+                  <strong>{mcp.transport}</strong>
+                </div>
+                <div className="simple-mcp-stat">
+                  <span className="simple-label">Data source</span>
+                  <strong>{mcp.dataSourceMode}</strong>
+                </div>
+              </div>
+
+              {!mcp.server.built && (
+                <div className="simple-mcp-warning">
+                  <i className="fa-solid fa-hammer"></i>
+                  <span>
+                    Build the server before connecting: <code>npm --prefix mcp-server run build</code>
+                  </span>
+                </div>
+              )}
+
+              <div className="simple-mcp-section">
+                <span className="simple-label">Available tools</span>
+                <div className="simple-mcp-tools">
+                  {mcp.capabilities.tools.map((tool) => (
+                    <span
+                      key={tool.name}
+                      className={`simple-mcp-tool ${tool.writes ? "write" : ""}`}
+                      title={tool.description}
+                    >
+                      <i className={`fa-solid ${tool.writes ? "fa-pen" : "fa-eye"}`}></i>
+                      {tool.name}
+                    </span>
+                  ))}
+                </div>
+                <p className="simple-mcp-hint">
+                  <i className="fa-solid fa-eye"></i> read-only · <i className="fa-solid fa-pen"></i> writes data
+                </p>
+              </div>
+
+              <div className="simple-mcp-section">
+                <div className="simple-mcp-config-head">
+                  <div>
+                    <span className="simple-label">Client configuration</span>
+                    <p className="simple-mcp-hint">
+                      Paste this into your MCP client's server configuration.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className="simple-copy-btn"
+                    onClick={() => handleCopy(mcpConfig, "mcp-config")}
+                  >
+                    {copied === "mcp-config" ? "✓ Copied" : "Copy config"}
+                  </button>
+                </div>
+                <pre className="simple-mcp-code">{mcpConfig}</pre>
+              </div>
+
+              <ol className="simple-mcp-steps">
+                <li>Build the server: <code>npm --prefix mcp-server run build</code></li>
+                <li>Copy the configuration above into your AI client.</li>
+                <li>Restart the client so it discovers the Bug Pilot tools.</li>
+              </ol>
+            </>
+          ) : (
+            <p className="simple-desc">MCP status is unavailable. Start the API server and reload.</p>
+          )}
+        </div>
+
+        {/* 4. Dark and Light Mode Switch */}
         <div className="simple-settings-card">
           <div className="simple-card-header">
             <div className="simple-card-title">
               <i className="fa-solid fa-circle-half-stroke"></i>
               <h3>Theme Preferences</h3>
             </div>
-            <span className="badge" style={{ fontSize: "12px" }}>
-              {dark ? "🌙 Dark Mode" : "☀️ Light Mode"}
+            <span className="badge badge-type">
+              <i className={`fa-solid ${dark ? "fa-moon" : "fa-sun"}`} aria-hidden="true" />
+              {dark ? "Dark mode" : "Light mode"}
             </span>
           </div>
 
@@ -181,23 +356,19 @@ export default function Settings() {
           </div>
         </div>
 
-        {/* 4. Sign Out Option */}
+        {/* 5. Sign Out Option */}
         <div className="simple-settings-card simple-danger-card">
           <div className="simple-card-header">
-            <div className="simple-card-title" style={{ color: "#ef4444" }}>
+            <div className="simple-card-title simple-danger-title">
               <i className="fa-solid fa-arrow-right-from-bracket"></i>
               <h3>Account Session</h3>
             </div>
           </div>
 
           <div className="simple-signout-row">
-            <div>
-              <strong style={{ fontSize: "14.5px", display: "block", color: "var(--text)" }}>
-                Sign Out of Your Account
-              </strong>
-              <span className="simple-desc" style={{ marginTop: "2px", display: "block" }}>
-                Safely disconnect and exit your current session on this browser.
-              </span>
+            <div className="simple-signout-copy">
+              <strong>Sign out of your account</strong>
+              <span>Disconnect this browser from the console.</span>
             </div>
 
             <button

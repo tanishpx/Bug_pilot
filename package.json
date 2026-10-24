@@ -14,6 +14,9 @@
     "db:migrate": "node server/scripts/migrate.js",
     "seed": "node server/scripts/seed.js",
     "db:seed": "node server/scripts/seed.js",
+    "mcp:build": "npm --prefix mcp-server run build",
+    "mcp:test": "npm --prefix mcp-server test",
+    "mcp:start": "npm --prefix mcp-server start",
     "test": "node --test test/bugs.test.js"
   },
   "dependencies": {

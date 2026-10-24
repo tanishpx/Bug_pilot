@@ -5,7 +5,7 @@ import { BUG_STATUSES, SEVERITIES } from "../../lib/forms";
 const chartStatuses = ["Open", "In Progress", "Resolved", "Closed"];
 const chartSeverities = ["Critical", "High", "Medium", "Low"];
 
-function BarChart({ title, data }: { title: string; data: InsightSeriesItem[] }) {
+function BarChart({ title, data, severity = false }: { title: string; data: InsightSeriesItem[]; severity?: boolean }) {
   const max = Math.max(...data.map((item) => item.count), 1);
   return (
     <section className="chart-card">
@@ -14,7 +14,12 @@ function BarChart({ title, data }: { title: string; data: InsightSeriesItem[] })
         {data.map((item) => (
           <div className="bar-row" key={item.label}>
             <span className="bar-label">{item.label}</span>
-            <div className="bar-track"><div className="bar-fill fill-status" style={{ width: `${(item.count / max) * 100}%` }} /></div>
+            <div className="bar-track">
+              <div
+                className={severity && item.label ? `bar-fill fill-sev-${item.label.toLowerCase()}` : "bar-fill fill-status"}
+                style={{ width: `${(item.count / max) * 100}%` }}
+              />
+            </div>
             <span className="bar-count">{item.count}</span>
           </div>
         ))}
@@ -25,14 +30,15 @@ function BarChart({ title, data }: { title: string; data: InsightSeriesItem[] })
 
 function TimeChart({ data }: { data: InsightSeriesItem[] }) {
   const max = Math.max(...data.map((item) => item.count), 1);
+  const labelStep = Math.max(1, Math.ceil(data.length / 8));
   return (
     <section className="chart-card insight-time-card">
       <div className="chart-heading"><h3>Bugs over time</h3><span>{data.reduce((sum, item) => sum + item.count, 0)} created</span></div>
       <div className="time-chart" aria-label="Bugs created over time">
-        {data.map((item) => (
+        {data.map((item, index) => (
           <div className="time-point" key={item.date} title={`${item.date}: ${item.count}`}>
             <div className="time-bar" style={{ height: `${Math.max((item.count / max) * 100, item.count ? 8 : 2)}%` }} />
-            <span>{item.date?.slice(5)}</span>
+            <span>{index % labelStep === 0 ? item.date?.slice(5) : ""}</span>
           </div>
         ))}
       </div>
@@ -108,7 +114,7 @@ export default function Analytics() {
       <TimeChart data={insights.bugsOverTime} />
       <div className="chart-grid insight-grid">
         <BarChart title="Status distribution" data={statusData} />
-        <BarChart title="Severity distribution" data={severityData} />
+        <BarChart title="Severity distribution" data={severityData} severity />
         <BarChart title="Category distribution" data={insights.categoryDistribution} />
         <section className="chart-card resolution-card"><h3>Resolution metrics</h3><div><strong>{insights.resolutionRate.toFixed(1)}%</strong><span>Resolution rate</span></div><div><strong>{insights.averageResolutionTime.toFixed(1)} days</strong><span>Average resolution time</span></div></section>
       </div>

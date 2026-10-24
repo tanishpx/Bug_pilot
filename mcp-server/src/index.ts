@@ -18,6 +18,18 @@ async function main() {
 
   const dataSource = getDataSource();
 
+  // Fail fast: an MCP client should never be told the server is ready while the
+  // Bug module is unreachable. An empty result set is valid; a connection error is not.
+  try {
+    await dataSource.getAll({ limit: 1 });
+  } catch (err) {
+    console.error(
+      '[BugPilot MCP] Cannot reach the Bug Pilot API. Start the server (npm run dev:server) or set BUG_PILOT_API_URL.',
+      err instanceof Error ? err.message : err
+    );
+    process.exit(1);
+  }
+
   registerGetBugContextTool(server, dataSource);
   registerListBugsTool(server, dataSource);
   registerCreateBugTool(server, dataSource);
@@ -28,7 +40,7 @@ async function main() {
 
   await server.connect(new StdioServerTransport());
 
-  console.error(`[BugPilot MCP] Running on stdio (${process.env.DATA_SOURCE_MODE || 'standalone'})`);
+  console.error('[BugPilot MCP] Running on stdio (data source: bugpilot_api)');
 }
 
 main().catch((err) => {

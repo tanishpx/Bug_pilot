@@ -6,6 +6,7 @@ try {
 import express from "express";
 import cors from "cors";
 import { connectDB, isDbConnected } from "./config/db.js";
+import { requireMcpAccess } from "./middleware/mcpAccess.js";
 
 import bugsRouter from "./routes/bugs.js";
 import submissionsRouter from "./routes/submissions.js";
@@ -37,12 +38,33 @@ app.use(
         callback(null, true);
         return;
       }
+      try {
+        const { hostname } = new URL(origin);
+        if (hostname.endsWith(".vercel.app") || hostname === "localhost" || hostname === "127.0.0.1") {
+          callback(null, true);
+          return;
+        }
+      } catch {}
       callback(new Error("Not allowed by CORS"));
     },
     credentials: true,
   })
 );
 app.use(express.json({ limit: "15mb" }));
+
+// Ensure DB is connected for serverless invocations
+app.use(async (_req, _res, next) => {
+  if (!isDbConnected() && process.env.MONGODB_URI) {
+    try {
+      await connectDB();
+    } catch (e) {
+      console.warn("[Server] DB connection attempt on request failed:", e.message);
+    }
+  }
+  next();
+});
+
+app.use("/api", requireMcpAccess);
 
 // Health check endpoints (both /health and /api/health)
 const healthHandler = (_req, res) => {

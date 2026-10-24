@@ -1,3 +1,6 @@
+// Client-side DTOs for the Bug Pilot REST API contract. These describe the
+// shapes the MCP server consumes; the API's Mongoose models remain the source of
+// truth for validation and persistence.
 export type BugSeverity = 'Low' | 'Medium' | 'High' | 'Critical';
 export type BugStatus =
   | 'New'

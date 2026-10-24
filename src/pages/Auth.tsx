@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { auth, firebaseConfigured, login, loginWithGoogle, isAdmin, resetPassword, signup } from "../lib/auth";
 import { onAuthStateChanged } from "firebase/auth";
+import BrandMark from "../components/BrandMark";
 
 type Mode = "login" | "signup";
 
@@ -15,7 +16,8 @@ export default function Auth() {
   const [showPw, setShowPw] = useState(false);
   const [message, setMessage] = useState("");
   const navigate = useNavigate();
-  const redirectTarget = searchParams.get("redirect") === "/admin" ? "/admin" : "/";
+  const redirectParam = searchParams.get("redirect");
+  const redirectTarget = redirectParam && redirectParam !== "/" ? redirectParam : "/admin/bugs";
 
   useEffect(() => {
     if (!auth) return undefined;
@@ -26,14 +28,13 @@ export default function Auth() {
 
   if (!firebaseConfigured) {
     return (
-      <div className="auth-page">
-        <div className="auth-panel">
-          <Link to="/" className="auth-back">← Back to home</Link>
-          <div className="auth-card">
-            <h1>Firebase setup required</h1>
-            <p className="auth-sub">Add the VITE_FIREBASE_* values from your Firebase project to .env, then restart the dev server.</p>
-          </div>
-        </div>
+      <div className="gate">
+        <BrandMark />
+        <h1>Firebase setup required</h1>
+        <p className="auth-sub">Add the VITE_FIREBASE_* values from your Firebase project to .env, then restart the dev server.</p>
+        <Link to="/" className="btn primary lg">
+          Back to home
+        </Link>
       </div>
     );
   }
@@ -113,25 +114,59 @@ export default function Auth() {
 
   return (
     <div className="auth-page">
-     
-      
+      <aside className="auth-aside">
+        <Link to="/" className="auth-aside-brand">
+          <BrandMark />
+          <span>BugPilot</span>
+        </Link>
+
+        <div className="auth-aside-body">
+          <h2>The console is where the record lives.</h2>
+          <p>
+            Reports, stack traces, repro steps, and the fix — attached to one ID
+            your team can actually find again.
+          </p>
+          <ul className="auth-points">
+            <li>Public feedback forms feed the same queue your team triages.</li>
+            <li>Severity, priority, and status stay on the record.</li>
+            <li>An MCP server lets your assistant work against real IDs.</li>
+          </ul>
+        </div>
+
+        <p className="auth-aside-foot">BugPilot Console</p>
+      </aside>
 
       <div className="auth-panel">
-        <Link to="/" className="auth-back">← Back to home</Link>
+        <Link to="/" className="auth-back">
+          <i className="fa-solid fa-arrow-left" aria-hidden="true" /> Back to home
+        </Link>
+
         <div className="auth-card">
-          <h1>{mode === "login" ? "Welcome back" : "Create your account"}</h1>
+          <h1>{mode === "login" ? "Sign in" : "Create an account"}</h1>
           <p className="auth-sub">
             {mode === "login"
-              ? "Log in to continue tracking your bugs."
-              : "Start your free BugPilot workspace."}
+              ? "Use the administrator account configured for this workspace."
+              : "Create a login, then an administrator can grant console access."}
           </p>
 
-          <div className="seg">
-            <button className={mode === "login" ? "seg-btn active" : "seg-btn"} onClick={() => switchMode("login")}>
-              Login
+          <div className="seg" role="tablist" aria-label="Authentication mode">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mode === "login"}
+              className={mode === "login" ? "seg-btn active" : "seg-btn"}
+              onClick={() => switchMode("login")}
+            >
+              Sign in
             </button>
-            <button className={mode === "signup" ? "seg-btn active" : "seg-btn"} onClick={() => switchMode("signup")}>
-              Sign up
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mode === "signup"}
+              className={mode === "signup" ? "seg-btn active" : "seg-btn"}
+              onClick={() => switchMode("signup")}
+            >
+              Create account
             </button>
           </div>
 
@@ -141,27 +176,54 @@ export default function Auth() {
             {mode === "signup" && (
               <label>
                 <span>Full name</span>
-                <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Ada Lovelace" required />
+                <input
+                  name="name"
+                  autoComplete="name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Ada Lovelace"
+                  required
+                />
               </label>
             )}
             <label>
               <span>Email</span>
-              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@company.com" required />
+              <input
+                name="email"
+                type="email"
+                autoComplete="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@company.com"
+                required
+              />
             </label>
             <label>
               <span>Password</span>
               <div className="pw">
-                <input type={showPw ? "text" : "password"} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" required />
-                <button type="button" className="pw-toggle" onClick={() => setShowPw((s) => !s)}>
-                  {showPw ? "🙈" : "👁️"}
+                <input
+                  name="password"
+                  type={showPw ? "text" : "password"}
+                  autoComplete={mode === "login" ? "current-password" : "new-password"}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Enter your password"
+                  required
+                />
+                <button
+                  type="button"
+                  className="pw-toggle"
+                  onClick={() => setShowPw((s) => !s)}
+                  aria-label={showPw ? "Hide password" : "Show password"}
+                  title={showPw ? "Hide password" : "Show password"}
+                >
+                  <i className={`fa-solid ${showPw ? "fa-eye-slash" : "fa-eye"}`} aria-hidden="true" />
                 </button>
               </div>
             </label>
+
             {mode === "login" && (
-              <div className="auth-row">
-                <label className="check">
-                  <input type="checkbox" defaultChecked /> Remember me
-                </label>
+              <div className="auth-row end">
                 <button type="button" className="linkish" onClick={handlePasswordReset}>
                   Forgot password?
                 </button>
@@ -169,7 +231,7 @@ export default function Auth() {
             )}
 
             <button className="btn primary lg block" type="submit">
-              {mode === "login" ? "Log in" : "Create account"}
+              {mode === "login" ? "Sign in to console" : "Create account"}
             </button>
           </form>
 
@@ -182,10 +244,10 @@ export default function Auth() {
           <p className="auth-foot">
             {mode === "login" ? "No account yet? " : "Already have an account? "}
             <button className="linkish" onClick={() => switchMode(mode === "login" ? "signup" : "login")}>
-              {mode === "login" ? "Sign up" : "Log in"}
+              {mode === "login" ? "Create one" : "Sign in"}
             </button>
             <br />
-            Sign in to access the BugPilot console and all features.
+            Console access is limited to administrator accounts.
           </p>
         </div>
       </div>

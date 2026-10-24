@@ -68,28 +68,28 @@ export default function Submissions() {
 
       <div className="stats-row">
         <div className="stat-card">
-          <div className="stat-icon" style={{ color: "#1565c0" }}>
+          <div className="stat-icon stat-icon-open">
             <i className="fa-solid fa-inbox"></i>
           </div>
           <div className="stat-value">{newCount}</div>
           <div className="stat-label">New</div>
         </div>
         <div className="stat-card">
-          <div className="stat-icon" style={{ color: "var(--muted)" }}>
+          <div className="stat-icon stat-icon-muted">
             <i className="fa-solid fa-eye"></i>
           </div>
           <div className="stat-value">{reviewedCount}</div>
           <div className="stat-label">Reviewed</div>
         </div>
         <div className="stat-card">
-          <div className="stat-icon" style={{ color: "#2e7d32" }}>
+          <div className="stat-icon stat-icon-resolved">
             <i className="fa-solid fa-check"></i>
           </div>
           <div className="stat-value">{acceptedCount}</div>
           <div className="stat-label">Accepted</div>
         </div>
         <div className="stat-card">
-          <div className="stat-icon" style={{ color: "#c0392b" }}>
+          <div className="stat-icon stat-icon-critical">
             <i className="fa-solid fa-xmark"></i>
           </div>
           <div className="stat-value">{rejectedCount}</div>
@@ -122,19 +122,17 @@ export default function Submissions() {
             <div className="submission-card" key={s._id}>
               <div className="sub-top">
                 <div>
-                  <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", marginBottom: "4px" }}>
+                  <div className="sub-meta">
                     <h3>{s.bugTitle || s.formTitle}</h3>
                     {s.bugTitle && s.formTitle && (
-                      <span className="badge" style={{ background: "var(--surface)", border: "1px solid var(--border)", fontSize: "11px" }}>
-                        via {s.formTitle}
-                      </span>
+                      <span className="badge sub-via">via {s.formTitle}</span>
                     )}
                   </div>
                   <span className="sub-time">
                     {new Date(s.createdAt).toLocaleString()}
                   </span>
                 </div>
-                <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                <div className="sub-badges">
                   {s.severity && (
                     <span className={`badge sev-${s.severity.toLowerCase()}`}>
                       {s.severity}
@@ -158,48 +156,34 @@ export default function Submissions() {
               {expanded === s._id && (
                 <>
                   {s.stepsToReproduce && (
-                    <div style={{ marginTop: "10px" }}>
-                      <strong
-                        style={{
-                          fontSize: "12px",
-                          color: "var(--muted)",
-                        }}
-                      >
-                        Steps to reproduce:
-                      </strong>
+                    <div className="sub-field">
+                      <strong className="sub-field-label">Steps to reproduce</strong>
                       <div className="sub-steps">
                         {s.stepsToReproduce}
                       </div>
                     </div>
                   )}
                   {s.environment && (
-                    <div style={{ fontSize: "13px", color: "var(--muted)", marginTop: "6px" }}>
+                    <div className="sub-detail">
                       <strong>Environment:</strong> {s.environment}
                     </div>
                   )}
                   {s.reporterEmail && (
-                    <div style={{ fontSize: "13px", color: "var(--muted)", marginTop: "4px" }}>
-                      <strong>Reporter Email:</strong> {s.reporterEmail}
+                    <div className="sub-detail">
+                      <strong>Reporter email:</strong> {s.reporterEmail}
                     </div>
                   )}
                   {s.attachments && s.attachments.length > 0 && (
-                    <div style={{ marginTop: "12px" }}>
-                      <strong
-                        style={{
-                          fontSize: "12px",
-                          color: "var(--muted)",
-                        }}
-                      >
-                        Attachments ({s.attachments.length}):
-                      </strong>
-                      <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginTop: "6px" }}>
+                    <div className="sub-field">
+                      <strong className="sub-field-label">Attachments ({s.attachments.length})</strong>
+                      <div className="sub-attachments">
                         {s.attachments.map((att, idx) => (
                           att.startsWith("data:image/") ? (
-                            <a key={idx} href={att} target="_blank" rel="noreferrer" style={{ display: "inline-block" }}>
+                            <a key={idx} href={att} target="_blank" rel="noreferrer" className="sub-thumb-link">
                               <img
                                 src={att}
                                 alt={`attachment-${idx}`}
-                                style={{ width: "80px", height: "60px", objectFit: "cover", borderRadius: "6px", border: "1px solid var(--border)" }}
+                                className="sub-thumb"
                               />
                             </a>
                           ) : (
@@ -207,8 +191,7 @@ export default function Submissions() {
                               key={idx}
                               href={att}
                               download={`attachment-${idx}`}
-                              className="badge"
-                              style={{ display: "inline-flex", alignItems: "center", gap: "4px", padding: "6px 10px", background: "var(--surface)", border: "1px solid var(--border)" }}
+                              className="badge sub-attachment"
                             >
                               <i className="fa-solid fa-paperclip"></i> Attachment {idx + 1}
                             </a>
@@ -226,6 +209,7 @@ export default function Submissions() {
                   onClick={() =>
                     setExpanded(expanded === s._id ? null : s._id)
                   }
+                  aria-expanded={expanded === s._id}
                 >
                   {expanded === s._id ? "Collapse" : "Expand"}
                 </button>

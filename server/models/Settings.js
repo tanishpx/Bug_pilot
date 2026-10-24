@@ -37,6 +37,10 @@ const settingsSchema = new mongoose.Schema(
       type: String,
       default: "#7c3aed",
     },
+    mcpEnabled: {
+      type: Boolean,
+      default: true,
+    },
   },
   {
     timestamps: true,

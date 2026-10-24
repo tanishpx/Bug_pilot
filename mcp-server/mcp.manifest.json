@@ -1,0 +1,57 @@
+{
+  "name": "bug-pilot",
+  "title": "Bug Pilot",
+  "version": "0.1.0",
+  "transport": "stdio",
+  "description": "Investigates live Bug Pilot bug reports: search, read full context, file reports, record hypotheses, and move bugs through their lifecycle.",
+  "tools": [
+    {
+      "name": "get_bug_context",
+      "title": "Get bug context",
+      "description": "Retrieve AI-optimized debugging context for one bug: reproduction steps, logs, environment, related files, and prior notes.",
+      "writes": false
+    },
+    {
+      "name": "list_bugs",
+      "title": "List bugs",
+      "description": "Search and filter bug reports by status, severity, type, or keyword.",
+      "writes": false
+    },
+    {
+      "name": "create_bug_report",
+      "title": "Create bug report",
+      "description": "File a new bug report with reproduction steps and error logs.",
+      "writes": true
+    },
+    {
+      "name": "add_investigation_note",
+      "title": "Add investigation note",
+      "description": "Record a root-cause hypothesis, technical finding, or proposed fix on a bug.",
+      "writes": true
+    },
+    {
+      "name": "update_bug_status",
+      "title": "Update bug status",
+      "description": "Move a bug through its lifecycle (In Progress, Resolved, Closed, and so on).",
+      "writes": true
+    }
+  ],
+  "resources": [
+    {
+      "name": "all-bugs",
+      "uri": "bugs://all",
+      "description": "Full JSON payload of every tracked bug report."
+    },
+    {
+      "name": "bug-detail",
+      "uri": "bugs://{id}",
+      "description": "Raw JSON payload of a single bug report."
+    }
+  ],
+  "prompts": [
+    {
+      "name": "investigate_bug",
+      "description": "Guided five-step root-cause analysis workflow for one bug."
+    }
+  ]
+}

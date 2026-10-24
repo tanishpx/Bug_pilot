@@ -1,5 +1,5 @@
 import nodemailer from "nodemailer";
-import Settings from "../models/Settings.js";
+import { getNotificationSettings } from "./settingsService.js";
 import { escapeHtml } from "../utils/validation.js";
 
 function getTransporter() {
@@ -31,11 +31,10 @@ function getTransporter() {
 
 export async function sendNewBugEmail({ userId, title, severity, description, date }) {
   try {
-    const settings = await Settings.findOne({ userId });
-    if (!settings || !settings.newBugNotifications) return;
+    const prefs = await getNotificationSettings(userId);
+    if (!prefs.newBugEnabled) return;
 
-    const to = settings.notificationEmail || settings.supportEmail || "admin@example.com";
-    const appName = settings.applicationName || "BugPilot";
+    const { to, appName } = prefs;
 
     const transporter = getTransporter();
     await transporter.sendMail({
@@ -62,11 +61,10 @@ export async function sendNewBugEmail({ userId, title, severity, description, da
 
 export async function sendStatusChangeEmail({ userId, title, previousStatus, newStatus, date }) {
   try {
-    const settings = await Settings.findOne({ userId });
-    if (!settings || !settings.statusChangeNotifications) return;
+    const prefs = await getNotificationSettings(userId);
+    if (!prefs.statusChangeEnabled) return;
 
-    const to = settings.notificationEmail || settings.supportEmail || "admin@example.com";
-    const appName = settings.applicationName || "BugPilot";
+    const { to, appName } = prefs;
 
     const transporter = getTransporter();
     await transporter.sendMail({

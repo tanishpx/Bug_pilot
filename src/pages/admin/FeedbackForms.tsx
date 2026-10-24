@@ -190,7 +190,9 @@ export default function FeedbackForms() {
           <h1>Feedback forms</h1>
           <p>Create and customize forms to collect bug and feedback info from your users.</p>
         </div>
-        <span className="count">{bugs.length} forms</span>
+        <div className="admin-head-actions">
+          <span className="count">{bugs.length} {bugs.length === 1 ? "form" : "forms"}</span>
+        </div>
       </div>
 
       <div className="admin-grid">
@@ -323,46 +325,90 @@ export default function FeedbackForms() {
             return (
             <div className="form-item" key={b.formId}>
               <div className="fi-top">
-                <h3>{b.title}</h3>
-                <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                <div className="fi-title-block">
+                  <div className="fi-title-row">
+                    <h3>{b.title}</h3>
+                    <span className={`badge sm ${pub ? "vis-public" : "vis-private"}`}>
+                      {pub ? "● Public" : "◆ Private"}
+                    </span>
+                  </div>
+                  {b.description && <p className="fi-desc">{b.description}</p>}
+                </div>
+                <div className="fi-top-actions">
                   <button
-                    className="linkish"
+                    type="button"
+                    className="icon-btn"
                     onClick={() => startEditing(b)}
-                    style={{ color: "var(--primary)", fontSize: "13px", fontWeight: 600 }}
+                    title="Edit form"
+                    aria-label="Edit form"
                   >
-                    <i className="fa-solid fa-pen-to-square"></i> Edit
+                    <i className="fa-solid fa-pen-to-square"></i>
                   </button>
                   <button
-                    className="linkish danger"
+                    type="button"
+                    className="icon-btn"
                     onClick={() => removeBug(b.formId)}
+                    title="Delete form"
+                    aria-label="Delete form"
                   >
-                    Delete
+                    <i className="fa-solid fa-trash"></i>
                   </button>
                 </div>
               </div>
-              <p>{b.description || "No description provided."}</p>
-              <div className="fi-meta">
-                <span
-                  className={`badge sev-${b.severity.toLowerCase()}`}
-                >
-                  {b.severity}
-                </span>
-                <span className="badge badge-type">{b.bugType}</span>
-                <span className="badge badge-priority">
-                  {b.priority}
-                </span>
-                <span
-                  className={`badge status-${b.status
-                    .toLowerCase()
-                    .replace(/\s+/g, "-")}`}
-                >
-                  {b.status}
-                </span>
-                <span className="fi-assignee">{b.assignee}</span>
-                <span className={`badge ${pub ? "vis-public" : "vis-private"}`}>
-                  {pub ? "● Public" : "◆ Private"}
-                </span>
+
+              {/* Shareable Link Box */}
+              <div className="fi-link-box">
+                <span className="fi-link-label">Form URL</span>
+                <code className="fi-link-url">{window.location.origin}/#/feedback/{b.formId}</code>
+                <div className="fi-link-btns">
+                  <button
+                    type="button"
+                    className="btn sm btn-copy"
+                    onClick={() => copyLink(b.formId)}
+                    title={pub ? "Copy public link" : "Form is private"}
+                  >
+                    <i className={`fa-solid ${copySuccess === b.formId ? "fa-check" : "fa-copy"}`}></i>
+                    {copySuccess === b.formId ? "Copied" : "Copy link"}
+                  </button>
+                  {pub ? (
+                    <a
+                      href={`/#/feedback/${b.formId}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="btn sm ghost"
+                      title="Open form in new tab"
+                    >
+                      <i className="fa-solid fa-arrow-up-right-from-square"></i> Open
+                    </a>
+                  ) : (
+                    <button className="btn sm ghost" disabled title="Private form">
+                      Private
+                    </button>
+                  )}
+                </div>
               </div>
+
+              <div className="fi-meta">
+                <span className="fi-meta-item">
+                  <span className="fi-meta-k">Severity</span>
+                  <span className={`badge sm sev-${b.severity.toLowerCase()}`}>{b.severity}</span>
+                </span>
+                <span className="fi-meta-item">
+                  <span className="fi-meta-k">Type</span>
+                  <span className="badge sm badge-type">{b.bugType}</span>
+                </span>
+                <span className="fi-meta-item">
+                  <span className="fi-meta-k">Priority</span>
+                  <span className="badge sm badge-priority">{b.priority}</span>
+                </span>
+                {b.assignee && (
+                  <span className="fi-meta-item">
+                    <span className="fi-meta-k">Assignee</span>
+                    <span className="fi-assignee">{b.assignee}</span>
+                  </span>
+                )}
+              </div>
+
               {b.tags && b.tags.length > 0 && (
                 <div className="fi-tags">
                   {b.tags.map((t) => (
@@ -370,41 +416,6 @@ export default function FeedbackForms() {
                   ))}
                 </div>
               )}
-              <div className="fi-actions">
-                <button
-                  className="btn sm btn-copy"
-                  onClick={() => copyLink(b.formId)}
-                  title={pub ? "Copy the public share link" : "Form is private — the link won't work until you make it public"}
-                >
-                  {copySuccess === b.formId
-                    ? "✓ Copied!"
-                    : pub ? "Copy link" : "Copy link (private)"}
-                </button>
-                {pub ? (
-                  <a
-                    href={`/#/feedback/${b.formId}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="btn sm ghost"
-                  >
-                    Open form ↗
-                  </a>
-                ) : (
-                  <button
-                    className="btn sm ghost"
-                    disabled
-                    title="Private forms can't be opened via public link"
-                  >
-                    Open form ↗
-                  </button>
-                )}
-                <button
-                  className="btn sm ghost"
-                  onClick={() => setActive(b)}
-                >
-                  Details
-                </button>
-              </div>
             </div>
             );
           })}

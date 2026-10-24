@@ -10,7 +10,8 @@ import { connectDB, disconnectDB, isDbConnected } from "../server/config/db.js";
 import app from "../server/index.js";
 import Bug from "../server/models/Bug.js";
 import InvestigationNote from "../server/models/InvestigationNote.js";
-import { DatabaseBugDataSource } from "../mcp-server/dist/data/storage.js";
+import Settings from "../server/models/Settings.js";
+import { BugPilotApiDataSource } from "../mcp-server/dist/data/storage.js";
 
 // Helper to make requests to the express app using in-process server listener
 let baseUrl = "";
@@ -234,26 +235,33 @@ test("BugPilot Complete Database & MCP Test Suite", async (t) => {
     assert.equal(data.database, "connected");
   });
 
-  // 11. MCP Bug Search against Database
-  await t.test("11. MCP DatabaseBugDataSource searches real database bugs", async () => {
-    const dataSource = new DatabaseBugDataSource();
+  // 11. MCP API client search against the running API
+  await t.test("11. MCP BugPilotApiDataSource searches real API bugs", async () => {
+    const dataSource = new BugPilotApiDataSource(`${baseUrl}/api`);
     const results = await dataSource.getAll({ status: "In Progress" });
 
     assert.ok(Array.isArray(results));
-    assert.ok(results.length >= 1, "Should find In Progress bugs in database");
-    assert.ok(results.some((b) => b.id === createdTestBugId || b.id === "BUG-102"));
+    assert.ok(results.length >= 1, "Should find In Progress bugs via the API");
+    assert.ok(
+      results.some((b) => b.id === createdTestBugId),
+      "The fixture bug must be found by the status filter"
+    );
+    assert.ok(
+      results.every((b) => b.status === "In Progress"),
+      "The MCP data source must honor the status filter"
+    );
   });
 
-  // 12. MCP Bug Retrieval against Database
-  await t.test("12. MCP DatabaseBugDataSource retrieves BUG-101 and investigation notes", async () => {
-    const dataSource = new DatabaseBugDataSource();
-    const bug101 = await dataSource.getById("BUG-101");
+  // 12. MCP API client retrieval against the running API
+  await t.test("12. MCP BugPilotApiDataSource retrieves a bug and its investigation notes", async () => {
+    const dataSource = new BugPilotApiDataSource(`${baseUrl}/api`);
+    const bug = await dataSource.getById(createdTestBugId);
 
-    assert.ok(bug101, "BUG-101 must exist in database");
-    assert.equal(bug101.id, "BUG-101");
-    assert.ok(bug101.description.includes("guest user"));
-    assert.ok(Array.isArray(bug101.investigationNotes));
-    assert.ok(bug101.investigationNotes.length >= 1, "BUG-101 should have investigation notes from DB");
+    assert.ok(bug, "The test fixture bug must be retrievable through the MCP data source");
+    assert.equal(bug.id, createdTestBugId);
+    assert.ok(bug.description.includes("Memory consumption grows"));
+    assert.ok(Array.isArray(bug.investigationNotes));
+    assert.ok(bug.investigationNotes.length >= 1, "The fixture bug should have an investigation note");
   });
 
   // 13. Delete Bug cleanup
@@ -273,5 +281,66 @@ test("BugPilot Complete Database & MCP Test Suite", async (t) => {
 
     const notesInDb = await InvestigationNote.find({ bugId: createdTestBugId });
     assert.equal(notesInDb.length, 0, "Investigation notes should be deleted with bug");
+  });
+
+  // 14. Settings seam: one load/save interface includes MCP status
+  await t.test("14. Settings returns workspace settings and MCP status through one interface", async () => {
+    const userId = "settings-seam-user";
+    const res = await fetch(`${baseUrl}/api/settings`, {
+      headers: { "X-User-Id": userId },
+    });
+
+    assert.equal(res.status, 200);
+    const data = await res.json();
+    assert.equal(data.settings.mcpEnabled, true);
+    assert.equal(data.mcp.enabled, true);
+    assert.equal(data.mcp.dataSourceMode, "bugpilot_api");
+    assert.equal(
+      data.mcp.clientConfig.mcpServers["bug-pilot"].env.DATA_SOURCE_MODE,
+      undefined,
+      "MCP client config must not expose a data-source mode"
+    );
+    assert.ok(data.mcp.capabilities.tools.length > 0, "MCP tools should come from the shared manifest");
+  });
+
+  // 15. Settings seam: the MCP toggle is enforced at the API seam
+  await t.test("15. Settings MCP toggle is enforced for MCP-originated requests", async () => {
+    const userId = "settings-seam-user";
+
+    try {
+      const disabled = await fetch(`${baseUrl}/api/settings`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", "X-User-Id": userId },
+        body: JSON.stringify({ mcpEnabled: false }),
+      });
+      assert.equal(disabled.status, 200);
+      const disabledData = await disabled.json();
+      assert.equal(disabledData.settings.mcpEnabled, false);
+      assert.equal(disabledData.mcp.enabled, false);
+      assert.equal(
+        disabledData.settings.applicationName,
+        "BugPilot",
+        "Partial updates must still create a document with defaults"
+      );
+
+      const blocked = await fetch(`${baseUrl}/api/bugs?limit=1`, {
+        headers: { "X-MCP-Agent": "bug-pilot-mcp", "X-User-Id": userId },
+      });
+      assert.equal(blocked.status, 403, "Disabled MCP access must be rejected at the API seam");
+
+      const enabled = await fetch(`${baseUrl}/api/settings`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", "X-User-Id": userId },
+        body: JSON.stringify({ mcpEnabled: true }),
+      });
+      assert.equal(enabled.status, 200);
+
+      const allowed = await fetch(`${baseUrl}/api/bugs?limit=1`, {
+        headers: { "X-MCP-Agent": "bug-pilot-mcp", "X-User-Id": userId },
+      });
+      assert.equal(allowed.status, 200, "Re-enabled MCP access should be allowed");
+    } finally {
+      await Settings.deleteOne({ userId });
+    }
   });
 });

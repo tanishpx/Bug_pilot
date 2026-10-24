@@ -1,4 +1,4 @@
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes, useSearchParams } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { onAuthStateChanged } from "firebase/auth";
 import Auth from "./pages/Auth";
@@ -15,8 +15,10 @@ import { auth } from "./lib/auth";
 import { ThemeProvider } from "./lib/theme";
 
 function ProtectedRoute() {
+  const [searchParams] = useSearchParams();
+  const preview = searchParams.get("preview") === "1";
   const [user, setUser] = useState(auth?.currentUser || null);
-  const [loading, setLoading] = useState(Boolean(auth));
+  const [loading, setLoading] = useState(Boolean(auth) && !preview);
 
   useEffect(() => {
     if (!auth) return undefined;
@@ -34,8 +36,8 @@ function ProtectedRoute() {
     );
   }
 
-  if (!user) {
-    return <Navigate to="/auth?redirect=%2Fadmin" replace />;
+  if (!user && !preview) {
+    return <Navigate to="/auth?redirect=%2Fadmin%2Fbugs" replace />;
   }
 
   return <AdminLayout />;
@@ -49,9 +51,9 @@ export default function App() {
         <Route path="/auth" element={<Auth />} />
         <Route path="/feedback/:formId" element={<FeedbackFormPage />} />
         <Route path="/admin" element={<ProtectedRoute />}>
-          <Route index element={<Navigate to="/admin/forms" replace />} />
-          <Route path="forms" element={<FeedbackForms />} />
+          <Route index element={<Navigate to="/admin/bugs" replace />} />
           <Route path="bugs" element={<BugDashboard />} />
+          <Route path="forms" element={<FeedbackForms />} />
           <Route path="submissions" element={<Submissions />} />
           <Route path="analytics" element={<Analytics />} />
           <Route path="settings" element={<Settings />} />

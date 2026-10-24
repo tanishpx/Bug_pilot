@@ -315,8 +315,8 @@ export default function BugDashboard() {
   if (loading) {
     return (
       <div className="admin-loading">
-        <i className="fa-solid fa-circle-notch fa-spin" style={{ fontSize: "28px", color: "var(--primary)" }}></i>
-        <p style={{ marginTop: "12px" }}>Connecting to database and loading bugs...</p>
+        <i className="fa-solid fa-circle-notch fa-spin admin-loading-icon"></i>
+        <p>Connecting to database and loading bugs...</p>
       </div>
     );
   }
@@ -328,7 +328,7 @@ export default function BugDashboard() {
           <h1>Bug Dashboard</h1>
           <p>Real-time database records, investigation notes, and bug tracking.</p>
         </div>
-        <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+        <div className="admin-head-actions">
           <button
             type="button"
             className="btn ghost"
@@ -351,20 +351,9 @@ export default function BugDashboard() {
       </div>
 
       {loadError && (
-        <div
-          style={{
-            background: "rgba(220, 53, 69, 0.1)",
-            border: "1px solid rgba(220, 53, 69, 0.3)",
-            padding: "12px 16px",
-            borderRadius: "8px",
-            marginBottom: "16px",
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-          }}
-        >
-          <span style={{ color: "var(--danger)" }}>
-            <i className="fa-solid fa-triangle-exclamation" style={{ marginRight: "8px" }}></i>
+        <div className="alert-error">
+          <span>
+            <i className="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>{" "}
             {loadError}
           </span>
           <button className="btn sm ghost" onClick={() => loadBugs(true)}>
@@ -383,28 +372,28 @@ export default function BugDashboard() {
           <div className="stat-label">Total Bugs</div>
         </div>
         <div className="stat-card">
-          <div className="stat-icon" style={{ color: "#1565c0" }}>
+          <div className="stat-icon stat-icon-open">
             <i className="fa-solid fa-circle-dot"></i>
           </div>
           <div className="stat-value">{openCount}</div>
           <div className="stat-label">Open / New</div>
         </div>
         <div className="stat-card">
-          <div className="stat-icon" style={{ color: "#9a7d0a" }}>
+          <div className="stat-icon stat-icon-progress">
             <i className="fa-solid fa-spinner"></i>
           </div>
           <div className="stat-value">{inProgressCount}</div>
           <div className="stat-label">In Progress</div>
         </div>
         <div className="stat-card">
-          <div className="stat-icon" style={{ color: "#c0392b" }}>
+          <div className="stat-icon stat-icon-critical">
             <i className="fa-solid fa-fire"></i>
           </div>
           <div className="stat-value">{criticalCount}</div>
           <div className="stat-label">Critical</div>
         </div>
         <div className="stat-card">
-          <div className="stat-icon" style={{ color: "#2e7d32" }}>
+          <div className="stat-icon stat-icon-resolved">
             <i className="fa-solid fa-check-circle"></i>
           </div>
           <div className="stat-value">{fixedCount}</div>
@@ -510,7 +499,7 @@ export default function BugDashboard() {
           </button>
         </div>
       ) : (
-        <div style={{ overflowX: "auto" }}>
+        <div className="table-scroll">
           <table className="data-table">
             <thead>
               <tr>
@@ -549,12 +538,7 @@ export default function BugDashboard() {
                     </td>
                     <td>
                       <code
-                        style={{
-                          fontSize: "12px",
-                          fontWeight: 600,
-                          cursor: "pointer",
-                          color: "var(--primary)",
-                        }}
+                        className="bug-id"
                         onClick={() => openBugDetails(bugIdentifier)}
                       >
                         {bugIdentifier}
@@ -562,20 +546,14 @@ export default function BugDashboard() {
                     </td>
                     <td>
                       <strong
-                        style={{ cursor: "pointer", color: "var(--primary)" }}
+                        className="bug-title"
                         onClick={() => openBugDetails(bugIdentifier)}
                         title="Click to view details and investigation notes"
                       >
                         {b.title}
                       </strong>
                       {b.tags && b.tags.length > 0 && (
-                        <div
-                          style={{
-                            fontSize: "12px",
-                            color: "var(--faint)",
-                            marginTop: "2px",
-                          }}
-                        >
+                        <div className="bug-tags">
                           {b.tags.map((t) => `#${t}`).join(" ")}
                         </div>
                       )}
@@ -610,26 +588,20 @@ export default function BugDashboard() {
                     </td>
                     <td>
                       <span
-                        className="badge"
-                        style={{
-                          background: notesCount > 0 ? "rgba(33, 150, 243, 0.15)" : "var(--surface)",
-                          color: notesCount > 0 ? "#1976d2" : "var(--muted)",
-                          border: "1px solid var(--border)",
-                          cursor: "pointer",
-                        }}
+                        className={`badge notes-badge ${notesCount > 0 ? "has-notes" : ""}`}
                         onClick={() => openBugDetails(bugIdentifier)}
                         title="View investigation notes"
                       >
-                        <i className="fa-solid fa-notes-medical" style={{ marginRight: "4px" }}></i>
+                        <i className="fa-solid fa-notes-medical" aria-hidden="true"></i>
                         {notesCount}
                       </span>
                     </td>
-                    <td style={{ color: "var(--muted)" }}>{b.assignee}</td>
-                    <td style={{ fontSize: "12px", color: "var(--faint)" }}>
+                    <td className="bug-assignee">{b.assignee}</td>
+                    <td className="bug-updated">
                       {new Date(b.updatedAt).toLocaleDateString()}
                     </td>
                     <td>
-                      <div style={{ display: "flex", gap: "6px" }}>
+                      <div className="row-actions">
                         <button
                           className="btn sm ghost"
                           onClick={() => openBugDetails(bugIdentifier)}
@@ -994,7 +966,7 @@ export default function BugDashboard() {
             )}
 
             {/* INVESTIGATION NOTES SECTION */}
-            <div style={{ marginTop: "24px", borderTop: "1px solid var(--border)", paddingTop: "18px" }}>
+            <div style={{ marginTop: "24px", borderTop: "1px solid var(--line)", paddingTop: "18px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
                 <h3 style={{ fontSize: "16px", margin: 0 }}>
                   <i className="fa-solid fa-brain" style={{ marginRight: "8px", color: "var(--primary)" }}></i>
@@ -1013,7 +985,7 @@ export default function BugDashboard() {
                       key={note.id || idx}
                       style={{
                         background: "var(--surface-2)",
-                        border: "1px solid var(--border)",
+                        border: "1px solid var(--line)",
                         borderRadius: "8px",
                         padding: "12px",
                       }}

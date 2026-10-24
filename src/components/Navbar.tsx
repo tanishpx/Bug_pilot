@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useTheme } from "../lib/theme";
 import { getSession, logout } from "../lib/auth";
-import logoUrl from "../assets/logo.svg";
+import BrandMark from "./BrandMark";
 
 export default function Navbar() {
   const { dark, toggle } = useTheme();
@@ -23,7 +23,7 @@ export default function Navbar() {
   return (
     <nav className="nav">
       <Link to="/" className="logo" onClick={() => window.scrollTo({ top: 0 })}>
-        <img src={logoUrl} alt="BugPilot logo" className="logo-img" />
+        <BrandMark />
         <span>BugPilot</span>
       </Link>
 
@@ -35,16 +35,20 @@ export default function Navbar() {
         {user ? (
           <>
             <span className="user-email">{user.email}</span>
+            <Link to="/admin/bugs" className="btn ghost">
+              Open console
+            </Link>
             <button className="btn ghost" onClick={handleLogout}>
-              Logout
+              Log out
             </button>
           </>
         ) : (
-          <Link to="/auth" className="btn ghost">
-            Log in
+          <Link to="/auth?redirect=%2Fadmin%2Fbugs" className="btn primary">
+            Open console
           </Link>
         )}
       </div>
     </nav>
   );
 }
+

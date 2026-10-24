@@ -30,9 +30,31 @@ __pycache__/
 .DS_Store
 Thumbs.db
 
+# Reports (Keep weekly reports)
 *_Report_*.pdf
-
 !weekly_reports/
-!weekly_reports/*.pdf
+!weekly_reports/**
 
+# Internal planning & context notes
 PLAN.md
+CONTEXT.md
+docs/
+
+# Private credentials & sensitive files
+*.pem
+*.key
+*.cert
+*.crt
+*.pfx
+*.p12
+credentials.json
+serviceAccountKey.json
+firebase-admin*.json
+
+# Temporary & test output junk
+scratch/
+test-results/
+.nyc_output/
+*.tmp
+*.bak
+*.swp

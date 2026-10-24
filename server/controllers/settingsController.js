@@ -1,64 +1,52 @@
-import Settings from "../models/Settings.js";
+import {
+  getSettings as readSettings,
+  updateSettings as writeSettings,
+  SettingsError,
+} from "../services/settingsService.js";
+import { getMcpStatus } from "../services/mcpStatusService.js";
+
+function resolveApiUrl(req) {
+  if (process.env.MCP_API_URL) return process.env.MCP_API_URL;
+  if (process.env.BUG_PILOT_API_URL) return process.env.BUG_PILOT_API_URL;
+  return `${req.protocol}://${req.get("host")}/api`;
+}
+
+// One load/save interface for the Settings page. MCP status is composed here so
+// the page does not orchestrate a second endpoint.
+function buildResponse(req, settings) {
+  return {
+    settings,
+    mcp: getMcpStatus({
+      userId: req.userId,
+      apiUrl: resolveApiUrl(req),
+      enabled: settings.mcpEnabled,
+    }),
+  };
+}
+
+function sendError(res, label, err, fallback) {
+  if (err instanceof SettingsError) {
+    return res.status(err.status).json({ error: err.message });
+  }
+
+  console.error(`[${label}] Error:`, err.message);
+  return res.status(500).json({ error: fallback });
+}
 
 export async function getSettings(req, res) {
   try {
-    let settings = await Settings.findOne({ userId: req.userId });
-    if (!settings) {
-      // Return defaults if not saved yet
-      settings = {
-        userId: req.userId,
-        newBugNotifications: false,
-        statusChangeNotifications: false,
-        notificationEmail: "",
-        applicationName: "BugPilot",
-        supportEmail: "support@bugpilot.com",
-        theme: "System",
-        primaryColor: "#7c3aed",
-      };
-    }
-    res.json(settings);
+    const settings = await readSettings(req.userId);
+    res.json(buildResponse(req, settings));
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    sendError(res, "getSettings", err, "Failed to load settings");
   }
 }
 
 export async function updateSettings(req, res) {
   try {
-    const {
-      newBugNotifications,
-      statusChangeNotifications,
-      notificationEmail,
-      applicationName,
-      supportEmail,
-      theme,
-      primaryColor,
-    } = req.body;
-
-    // Validate email if present
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (notificationEmail && !emailRegex.test(notificationEmail)) {
-      return res.status(400).json({ error: "Invalid notification email address" });
-    }
-    if (supportEmail && !emailRegex.test(supportEmail)) {
-      return res.status(400).json({ error: "Invalid support email address" });
-    }
-
-    const settings = await Settings.findOneAndUpdate(
-      { userId: req.userId },
-      {
-        newBugNotifications,
-        statusChangeNotifications,
-        notificationEmail,
-        applicationName,
-        supportEmail,
-        theme,
-        primaryColor,
-      },
-      { new: true, upsert: true }
-    );
-
-    res.json(settings);
+    const settings = await writeSettings(req.userId, req.body);
+    res.json(buildResponse(req, settings));
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    sendError(res, "updateSettings", err, "Failed to update settings");
   }
 }

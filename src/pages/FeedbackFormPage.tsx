@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useParams, Link } from "react-router-dom";
 import { getPublicForm, submitFeedback, type PublicForm } from "../lib/api";
 import { BUG_TYPES, SEVERITIES, type BugType, type Severity } from "../lib/forms";
+import BrandMark from "../components/BrandMark";
 
 type FormState = "loading" | "form" | "success" | "not-found";
 
@@ -51,7 +52,7 @@ export default function FeedbackFormPage() {
     bugDescription.trim(),
     stepsToReproduce.trim(),
   ].filter(Boolean).length;
-  const progressPercent = Math.round(((completedSteps + 2) / 5) * 100);
+  const progressPercent = Math.round((completedSteps / 3) * 100);
 
   useEffect(() => {
     if (!formId) return;
@@ -209,7 +210,7 @@ export default function FeedbackFormPage() {
   if (state === "loading") {
     return (
       <div className="gate">
-        <span className="logo-mark">◈</span>
+        <BrandMark />
         <p>Loading form...</p>
       </div>
     );
@@ -218,7 +219,7 @@ export default function FeedbackFormPage() {
   if (state === "not-found") {
     return (
       <div className="gate">
-        <span className="logo-mark">◈</span>
+        <BrandMark />
         <h1>Form not found</h1>
         <p>
           This feedback form doesn't exist, is set to private, or is no
@@ -239,10 +240,11 @@ export default function FeedbackFormPage() {
             <i className="fa-solid fa-circle-check saas-success-icon"></i>
           </div>
           <h1 className="saas-title" style={{ textAlign: "center", marginBottom: "8px" }}>
-            Bug Report Submitted!
+            Report received.
           </h1>
           <p className="saas-subtitle" style={{ textAlign: "center", marginBottom: "24px" }}>
-            Thank you for reporting this issue. Our engineering team has received your report and will investigate it shortly.
+            Your report is in the queue. Keep the submission ID — it is the fastest
+            way for the team to find this record.
           </p>
 
           <div className="saas-receipt-card">
@@ -289,10 +291,10 @@ export default function FeedbackFormPage() {
               className="saas-btn secondary"
               onClick={handleResetForm}
             >
-              <i className="fa-solid fa-plus"></i> Submit Another Issue
+              <i className="fa-solid fa-plus"></i> Submit another report
             </button>
             <Link to="/" className="saas-btn primary">
-              <i className="fa-solid fa-house"></i> Return to Home
+              <i className="fa-solid fa-house"></i> Return home
             </Link>
           </div>
         </div>
@@ -324,7 +326,7 @@ export default function FeedbackFormPage() {
             aria-valuenow={progressPercent}
             aria-valuemin={0}
             aria-valuemax={100}
-            title={`${completedSteps + 2} of 5 required sections complete`}
+            title={`${completedSteps} of 3 required fields complete`}
           >
             <div
               className="saas-progress-fill"
@@ -478,7 +480,7 @@ export default function FeedbackFormPage() {
                 onChange={(e) => setReporterEmail(e.target.value)}
                 placeholder="you@example.com"
               />
-              <span className="saas-helper">We will only notify you when this bug is resolved.</span>
+              <span className="saas-helper">Optional. Used only if the team needs to follow up on this report.</span>
             </div>
 
             {/* Attachments Field */}
