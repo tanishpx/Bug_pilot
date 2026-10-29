@@ -10,8 +10,13 @@ This folder contains the complete Prometheus and Grafana monitoring configuratio
 - `provisioning/dashboards/bugpilot_dashboard.json`: The complete Grafana dashboard definition for Bug Pilot.
 - `assets/`: Live dashboard screenshots and visuals.
 
-## Dashboard Preview
-![Grafana Dashboard Preview](assets/grafana-dashboard-screenshot.png)
+## Dashboard Previews
+
+### Light Mode
+![Grafana Dashboard Light Mode](assets/grafana-dashboard-light.png)
+
+### Dark Mode
+![Grafana Dashboard Dark Mode](assets/grafana-dashboard-screenshot.png)
 
 ## How to Run
 
