@@ -7,19 +7,6 @@ import {
   type SettingsPayload,
 } from "../../lib/api";
 
-const ADMIN_EMAILS = [
-  {
-    email: "Tanish4181@gmail.com",
-    role: "Primary Administrator",
-    name: "Tanish",
-  },
-  {
-    email: "sajalsinghal62650@gmail.com",
-    role: "Administrator",
-    name: "Sajal Singhal",
-  },
-];
-
 export default function Settings() {
   const { dark, toggle } = useTheme();
   const sessionUser = getSession();
@@ -30,7 +17,8 @@ export default function Settings() {
   const [savingMcp, setSavingMcp] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const currentUserEmail = sessionUser?.email || "Tanish4181@gmail.com";
+  const currentUserEmail = sessionUser?.email || "admin@bugpilot.dev";
+  const userInitial = currentUserEmail.charAt(0).toUpperCase();
 
   useEffect(() => {
     let active = true;
@@ -109,7 +97,7 @@ export default function Settings() {
 
           <div className="simple-profile-box">
             <div className="simple-avatar">
-              {currentUserEmail.charAt(0).toUpperCase()}
+              {userInitial}
             </div>
             <div className="simple-profile-details">
               <span className="simple-label">Logged In Email ID</span>
@@ -131,47 +119,60 @@ export default function Settings() {
           </div>
         </div>
 
-        {/* 2. Administrator Emails */}
+        {/* 2. Administrator Access & Roles */}
         <div className="simple-settings-card">
           <div className="simple-card-header">
             <div className="simple-card-title">
               <i className="fa-solid fa-users-gear"></i>
-              <h3>Administrator Emails</h3>
+              <h3>Administrator Access</h3>
             </div>
-            <span className="badge badge-type">{ADMIN_EMAILS.length} Administrators</span>
+            <span className="badge badge-type">Verified Admin</span>
           </div>
 
           <p className="simple-desc">
-            Authorized administrator accounts with full permissions to manage forms, bugs, and system settings.
+            Authorized administrator account with full permissions to triage bugs, manage forms, inspect telemetry, and configure AI MCP integration.
           </p>
 
           <div className="simple-admin-list">
-            {ADMIN_EMAILS.map((admin) => (
-              <div key={admin.email} className="simple-admin-item">
-                <div className="simple-admin-avatar">
-                  <i className="fa-solid fa-user-shield"></i>
+            <div className="simple-admin-item">
+              <div className="simple-admin-avatar">
+                <i className="fa-solid fa-user-shield"></i>
+              </div>
+              <div className="simple-admin-info">
+                <div className="simple-admin-top">
+                  <h4>{currentUserEmail.split("@")[0]}</h4>
+                  <span className="badge simple-role-badge">
+                    Primary Administrator
+                  </span>
                 </div>
-                <div className="simple-admin-info">
-                  <div className="simple-admin-top">
-                    <h4>{admin.name}</h4>
-                    <span className="badge simple-role-badge">
-                      {admin.role}
-                    </span>
-                  </div>
-                  <div className="simple-email-row">
-                    <code className="simple-code-email">{admin.email}</code>
-                    <button
-                      type="button"
-                      className="simple-copy-btn"
-                      onClick={() => handleCopy(admin.email, admin.email)}
-                      title="Copy administrator email"
-                    >
-                      {copied === admin.email ? "✓ Copied" : "Copy"}
-                    </button>
-                  </div>
+                <div className="simple-email-row">
+                  <code className="simple-code-email">{currentUserEmail}</code>
+                  <button
+                    type="button"
+                    className="simple-copy-btn"
+                    onClick={() => handleCopy(currentUserEmail, "admin-email")}
+                    title="Copy administrator email"
+                  >
+                    {copied === "admin-email" ? "✓ Copied" : "Copy"}
+                  </button>
                 </div>
               </div>
-            ))}
+            </div>
+          </div>
+
+          <div className="admin-perm-list">
+            <div className="admin-perm-item">
+              <i className="fa-solid fa-circle-check"></i>
+              <span>Full read & write control over bug tracking and incident logs</span>
+            </div>
+            <div className="admin-perm-item">
+              <i className="fa-solid fa-circle-check"></i>
+              <span>Model Context Protocol (MCP) tool authorization & stdio config</span>
+            </div>
+            <div className="admin-perm-item">
+              <i className="fa-solid fa-circle-check"></i>
+              <span>Workspace telemetry, public forms, and submission triage</span>
+            </div>
           </div>
         </div>
 

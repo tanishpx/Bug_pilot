@@ -517,66 +517,163 @@ export default function BugDashboard() {
           </button>
         </div>
       ) : (
-        <div className="table-scroll">
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th style={{ width: "40px" }}>
-                  <input
-                    type="checkbox"
-                    checked={selected.size === bugs.length && bugs.length > 0}
-                    onChange={toggleAll}
-                  />
-                </th>
-                <th>ID</th>
-                <th>Title</th>
-                <th>Status</th>
-                <th>Severity</th>
-                <th>Priority</th>
-                <th>Type</th>
-                <th>Notes</th>
-                <th>Assignee</th>
-                <th>Updated</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {bugs.map((b) => {
-                const bugIdentifier = b.bugId || b.formId || b.id || b._id;
-                const notesCount = (b.investigationNotes && b.investigationNotes.length) || 0;
+        <>
+          <div className="table-scroll desktop-table-container">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th style={{ width: "40px" }}>
+                    <input
+                      type="checkbox"
+                      checked={selected.size === bugs.length && bugs.length > 0}
+                      onChange={toggleAll}
+                    />
+                  </th>
+                  <th>ID</th>
+                  <th>Title</th>
+                  <th>Status</th>
+                  <th>Severity</th>
+                  <th>Priority</th>
+                  <th>Type</th>
+                  <th>Notes</th>
+                  <th>Assignee</th>
+                  <th>Updated</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {bugs.map((b) => {
+                  const bugIdentifier = b.bugId || b.formId || b.id || b._id;
+                  const notesCount = (b.investigationNotes && b.investigationNotes.length) || 0;
 
-                return (
-                  <tr key={bugIdentifier}>
-                    <td>
+                  return (
+                    <tr key={bugIdentifier}>
+                      <td>
+                        <input
+                          type="checkbox"
+                          checked={selected.has(bugIdentifier)}
+                          onChange={() => toggleSelect(bugIdentifier)}
+                        />
+                      </td>
+                      <td>
+                        <code
+                          className="bug-id"
+                          onClick={() => openBugDetails(bugIdentifier)}
+                        >
+                          {bugIdentifier}
+                        </code>
+                      </td>
+                      <td>
+                        <strong
+                          className="bug-title"
+                          onClick={() => openBugDetails(bugIdentifier)}
+                          title="Click to view details and investigation notes"
+                        >
+                          {b.title}
+                        </strong>
+                        {b.tags && b.tags.length > 0 && (
+                          <div className="bug-tags">
+                            {b.tags.map((t) => `#${t}`).join(" ")}
+                          </div>
+                        )}
+                      </td>
+                      <td>
+                        <select
+                          value={b.status}
+                          onChange={(e) =>
+                            handleStatusChange(
+                              bugIdentifier,
+                              e.target.value as BugStatus
+                            )
+                          }
+                        >
+                          {BUG_STATUSES.map((s) => (
+                            <option key={s}>{s}</option>
+                          ))}
+                        </select>
+                      </td>
+                      <td>
+                        <span className={`badge sev-${b.severity.toLowerCase()}`}>
+                          {b.severity}
+                        </span>
+                      </td>
+                      <td>
+                        <span className={`badge badge-${b.priority.toLowerCase()}`}>
+                          {b.priority}
+                        </span>
+                      </td>
+                      <td>
+                        <span className="badge badge-type">{b.bugType}</span>
+                      </td>
+                      <td>
+                        <span
+                          className={`badge notes-badge ${notesCount > 0 ? "has-notes" : ""}`}
+                          onClick={() => openBugDetails(bugIdentifier)}
+                          title="View investigation notes"
+                        >
+                          <i className="fa-solid fa-notes-medical" aria-hidden="true"></i>
+                          {notesCount}
+                        </span>
+                      </td>
+                      <td className="bug-assignee">{b.assignee}</td>
+                      <td className="bug-updated">
+                        {new Date(b.updatedAt).toLocaleDateString()}
+                      </td>
+                      <td>
+                        <div className="row-actions">
+                          <button
+                            className="btn sm ghost"
+                            onClick={() => openBugDetails(bugIdentifier)}
+                            title="Open Bug Details & Investigation"
+                          >
+                            <i className="fa-solid fa-magnifying-glass"></i>
+                          </button>
+                          <button
+                            className="btn sm ghost"
+                            onClick={() => startEditing(b)}
+                            title="Quick Edit"
+                          >
+                            <i className="fa-solid fa-pen-to-square"></i>
+                          </button>
+                          <button
+                            className="btn sm ghost linkish danger"
+                            onClick={() => handleDelete(bugIdentifier)}
+                            title="Delete Bug"
+                          >
+                            <i className="fa-solid fa-trash"></i>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Mobile Card List for Viewports < 768px */}
+          <div className="mobile-bug-cards" aria-label="Incidents list">
+            {bugs.map((b) => {
+              const bugIdentifier = b.bugId || b.formId || b.id || b._id;
+              const notesCount = (b.investigationNotes && b.investigationNotes.length) || 0;
+              return (
+                <div key={bugIdentifier} className="mobile-incident-card">
+                  <div className="mobile-card-top">
+                    <div className="mobile-card-id-row">
                       <input
                         type="checkbox"
                         checked={selected.has(bugIdentifier)}
                         onChange={() => toggleSelect(bugIdentifier)}
+                        aria-label={`Select ${bugIdentifier}`}
                       />
-                    </td>
-                    <td>
                       <code
                         className="bug-id"
                         onClick={() => openBugDetails(bugIdentifier)}
                       >
                         {bugIdentifier}
                       </code>
-                    </td>
-                    <td>
-                      <strong
-                        className="bug-title"
-                        onClick={() => openBugDetails(bugIdentifier)}
-                        title="Click to view details and investigation notes"
-                      >
-                        {b.title}
-                      </strong>
-                      {b.tags && b.tags.length > 0 && (
-                        <div className="bug-tags">
-                          {b.tags.map((t) => `#${t}`).join(" ")}
-                        </div>
-                      )}
-                    </td>
-                    <td>
+                    </div>
+                    <div className="mobile-card-status">
                       <select
                         value={b.status}
                         onChange={(e) =>
@@ -590,65 +687,72 @@ export default function BugDashboard() {
                           <option key={s}>{s}</option>
                         ))}
                       </select>
-                    </td>
-                    <td>
-                      <span className={`badge sev-${b.severity.toLowerCase()}`}>
-                        {b.severity}
-                      </span>
-                    </td>
-                    <td>
-                      <span className={`badge badge-${b.priority.toLowerCase()}`}>
-                        {b.priority}
-                      </span>
-                    </td>
-                    <td>
-                      <span className="badge badge-type">{b.bugType}</span>
-                    </td>
-                    <td>
-                      <span
-                        className={`badge notes-badge ${notesCount > 0 ? "has-notes" : ""}`}
+                    </div>
+                  </div>
+
+                  <h3
+                    className="mobile-card-title"
+                    onClick={() => openBugDetails(bugIdentifier)}
+                  >
+                    {b.title}
+                  </h3>
+
+                  {b.tags && b.tags.length > 0 && (
+                    <div className="bug-tags mobile-tags">
+                      {b.tags.map((t) => `#${t}`).join(" ")}
+                    </div>
+                  )}
+
+                  <div className="mobile-card-badges">
+                    <span className={`badge sev-${b.severity.toLowerCase()}`}>
+                      {b.severity}
+                    </span>
+                    <span className={`badge badge-${b.priority.toLowerCase()}`}>
+                      {b.priority}
+                    </span>
+                    <span className="badge badge-type">{b.bugType}</span>
+                    <span
+                      className={`badge notes-badge ${notesCount > 0 ? "has-notes" : ""}`}
+                      onClick={() => openBugDetails(bugIdentifier)}
+                    >
+                      <i className="fa-solid fa-notes-medical" aria-hidden="true"></i>
+                      {notesCount}
+                    </span>
+                  </div>
+
+                  <div className="mobile-card-footer">
+                    <span className="mobile-card-assignee">
+                      <i className="fa-solid fa-user"></i> {b.assignee || "Unassigned"}
+                    </span>
+                    <div className="row-actions">
+                      <button
+                        className="btn sm ghost"
                         onClick={() => openBugDetails(bugIdentifier)}
-                        title="View investigation notes"
+                        title="Open Details & Notes"
                       >
-                        <i className="fa-solid fa-notes-medical" aria-hidden="true"></i>
-                        {notesCount}
-                      </span>
-                    </td>
-                    <td className="bug-assignee">{b.assignee}</td>
-                    <td className="bug-updated">
-                      {new Date(b.updatedAt).toLocaleDateString()}
-                    </td>
-                    <td>
-                      <div className="row-actions">
-                        <button
-                          className="btn sm ghost"
-                          onClick={() => openBugDetails(bugIdentifier)}
-                          title="Open Bug Details & Investigation"
-                        >
-                          <i className="fa-solid fa-magnifying-glass"></i>
-                        </button>
-                        <button
-                          className="btn sm ghost"
-                          onClick={() => startEditing(b)}
-                          title="Quick Edit"
-                        >
-                          <i className="fa-solid fa-pen-to-square"></i>
-                        </button>
-                        <button
-                          className="btn sm ghost linkish danger"
-                          onClick={() => handleDelete(bugIdentifier)}
-                          title="Delete Bug"
-                        >
-                          <i className="fa-solid fa-trash"></i>
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+                        <i className="fa-solid fa-magnifying-glass"></i> Inspect
+                      </button>
+                      <button
+                        className="btn sm ghost"
+                        onClick={() => startEditing(b)}
+                        title="Quick Edit"
+                      >
+                        <i className="fa-solid fa-pen-to-square"></i>
+                      </button>
+                      <button
+                        className="btn sm ghost linkish danger"
+                        onClick={() => handleDelete(bugIdentifier)}
+                        title="Delete Bug"
+                      >
+                        <i className="fa-solid fa-trash"></i>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </>
       )}
 
       {/* CREATE NEW BUG MODAL */}

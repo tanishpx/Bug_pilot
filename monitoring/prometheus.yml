@@ -1,0 +1,12 @@
+global:
+  scrape_interval: 5s
+  evaluation_interval: 5s
+
+scrape_configs:
+  - job_name: "bugpilot-server"
+    metrics_path: "/metrics"
+    static_configs:
+      - targets: ["backend:3001", "host.docker.internal:3001", "localhost:3001"]
+        labels:
+          app: "bugpilot"
+          env: "production"

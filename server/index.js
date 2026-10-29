@@ -7,6 +7,7 @@ import express from "express";
 import cors from "cors";
 import { connectDB, isDbConnected } from "./config/db.js";
 import { requireMcpAccess } from "./middleware/mcpAccess.js";
+import { metricsMiddleware, client } from "./middleware/metrics.js";
 
 import bugsRouter from "./routes/bugs.js";
 import submissionsRouter from "./routes/submissions.js";
@@ -51,6 +52,7 @@ app.use(
   })
 );
 app.use(express.json({ limit: "15mb" }));
+app.use(metricsMiddleware);
 
 // Ensure DB is connected for serverless invocations
 app.use(async (_req, _res, next) => {
@@ -77,6 +79,16 @@ const healthHandler = (_req, res) => {
 
 app.get("/health", healthHandler);
 app.get("/api/health", healthHandler);
+
+// Prometheus metrics endpoint
+app.get("/metrics", async (_req, res) => {
+  try {
+    res.setHeader("Content-Type", client.register.contentType);
+    res.send(await client.register.metrics());
+  } catch (err) {
+    res.status(500).send(err.message);
+  }
+});
 
 // API route handlers
 app.use("/api/bugs", bugsRouter);
