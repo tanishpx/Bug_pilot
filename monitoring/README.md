@@ -8,17 +8,37 @@ This folder contains the complete Prometheus and Grafana monitoring configuratio
 - `provisioning/datasources/prometheus.yml`: Automatic Prometheus data source registration in Grafana.
 - `provisioning/dashboards/dashboards.yml`: Automatic dashboard provider configuration for Grafana.
 - `provisioning/dashboards/bugpilot_dashboard.json`: The complete Grafana dashboard definition for Bug Pilot.
-- `assets/`: Live dashboard screenshots and visuals.
+- `scripts/simulate_traffic.js`: Automated traffic & load generator for testing metrics under load.
+- `assets/`: Dashboard comparison screenshots under idle and loaded states.
 
-## Dashboard Previews
+---
 
-### Light Mode
-![Grafana Dashboard Light Mode](assets/grafana-dashboard-light.png)
+## How to Run Load Simulator
+To test metrics under realistic load:
+```bash
+# node monitoring/scripts/simulate_traffic.js [duration_seconds] [concurrency]
+node monitoring/scripts/simulate_traffic.js 45 5
+```
 
-### Dark Mode
-![Grafana Dashboard Dark Mode](assets/grafana-dashboard-screenshot.png)
+---
 
-## How to Run
+## Dashboard Visual Comparisons (Light Mode)
+
+### 1. Grafana Dashboard
+| State | Screenshot | Description |
+| :--- | :--- | :--- |
+| **Idle** | ![Grafana Idle](assets/grafana-dashboard-idle.png) | 0 req/sec, minimal baseline memory/CPU |
+| **Under Load** | ![Grafana Loaded](assets/grafana-dashboard-loaded.png) | 1,140+ requests, active in-flight tracking, elevated throughput |
+
+### 2. Prometheus Expression & Graph
+| State | Screenshot | Description |
+| :--- | :--- | :--- |
+| **Idle** | ![Prometheus Idle](assets/prometheus-dashboard-idle.png) | Query returns empty result when no requests have arrived |
+| **Under Load** | ![Prometheus Loaded](assets/prometheus-dashboard-loaded.png) | Multi-series graph showing per-route request rates over time |
+
+---
+
+## How to Run the Monitoring Stack
 
 ### Option 1: Standalone Monitoring Containers
 ```bash
@@ -28,7 +48,6 @@ docker compose -f monitoring/docker-compose.monitoring.yml up -d
 - Prometheus: `http://localhost:9090`
 
 ### Option 2: Full Stack (App + Monitoring)
-From the repository root:
 ```bash
 docker compose up -d
 ```
@@ -37,12 +56,3 @@ docker compose up -d
 - Metrics: `http://localhost:3001/metrics`
 - Grafana: `http://localhost:3000`
 - Prometheus: `http://localhost:9090`
-
-## Tracked Metrics
-- `bugpilot_http_requests_total`: Total requests partitioned by method, route, and status code.
-- `bugpilot_http_request_duration_seconds`: Request latency histogram (p50 median, p95 latency, p99 tail latency).
-- `bugpilot_http_active_requests`: Real-time active in-flight requests.
-- `bugpilot_nodejs_heap_size_used_bytes` / `total_bytes`: V8 engine heap memory utilization.
-- `bugpilot_process_resident_memory_bytes`: Total RSS memory.
-- `bugpilot_process_cpu_seconds_total`: Process CPU load.
-- `bugpilot_nodejs_eventloop_lag_seconds`: Node.js event loop latency.
