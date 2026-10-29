@@ -1,125 +1,108 @@
-# Bug Pilot MCP Server (Model Context Protocol)
+# Bug Pilot 🪲🚀
 
-Standalone Model Context Protocol (MCP) server that empowers AI assistants to understand, investigate, and diagnose bug reports with rich contextual details (error logs, reproduction steps, runtime environment, suspected files, and prior investigation notes).
+Bug Pilot is a full-stack bug and feedback management application with integrated AI assistance via Model Context Protocol (MCP) and full-stack observability with Prometheus and Grafana.
 
----
-
-## 🎯 Purpose & Design
-
-- **API-Backed & Live**: Operates on live Bug Pilot REST API records. The API owns the database, validation, lifecycle transitions, and persistence; the MCP server owns only the AI-facing interface.
-- **AI-Optimized Context**: Returns bug reports structured specifically for debugging agents, including reproduction steps, stack traces, hypotheses, and diagnostic checklists.
-- **Single Bug Module**: The MCP server implements `IBugDataSource` with `BugPilotApiDataSource`, a client of the Express API. It has no Mongoose schema and no direct MongoDB connection, so the API's rules cannot be bypassed.
+Teams can create public bug report forms, triage submissions in real-time on an admin dashboard, record detailed investigation notes, diagnose issues with AI agents backed by MongoDB, and monitor server performance and health metrics through Grafana.
 
 ---
 
-## 📁 Project Structure
+## ⚡ Quickstart
 
-```
-mcp-server/
-├── src/
-│   ├── index.ts                     # Main entrypoint; registers tools, resources, prompts & stdio transport
-│   ├── config/
-│   │   └── env.ts                   # Deterministic .env loading from any working directory
-│   ├── types/
-│   │   └── bug.ts                   # Types: BugReport, BugSeverity, BugStatus, InvestigationNote, etc.
-│   ├── data/
-│   │   ├── sample-bugs.json         # Realistic initial bug datasets (UI crash, auth 500, database timeout)
-│   │   └── storage.ts               # IBugDataSource + BugPilotApiDataSource (REST client)
-│   ├── tools/
-│   │   ├── getBugContext.ts         # `get_bug_context`: Returns rich, AI-optimized debugging context
-│   │   ├── listBugs.ts              # `list_bugs`: Filter by status, severity, type, or search term
-│   │   ├── createBug.ts             # `create_bug_report`: Submit new bug context into store
-│   │   ├── addInvestigationNote.ts  # `add_investigation_note`: Log AI hypotheses and fix suggestions
-│   │   └── updateBugStatus.ts       # `update_bug_status`: Move bug across lifecycle states
-│   ├── resources/
-│   │   └── bugResources.ts          # Resources: `bugs://all` and `bugs://{id}`
-│   └── prompts/
-│       └── investigateBugPrompt.ts  # Guided AI workflow prompt `investigate_bug`
-├── dist/                            # Compiled JavaScript distribution
-├── test-server.ts                   # End-to-end client verification script
-├── package.json
-├── tsconfig.json
-└── .env.example
-```
+Choose your preferred setup method:
 
----
+### Option A: Docker (Fastest — One Command)
 
-## 🛠️ Exposed MCP Capabilities
-
-### Tools
-| Tool | Description | Key Arguments |
-|------|-------------|---------------|
-| `get_bug_context` | Retrieves comprehensive, AI-optimized context for a bug report | `bugId` (e.g. `"BUG-101"`) |
-| `list_bugs` | Lists bugs with optional filtering | `status`, `severity`, `type`, `search`, `limit` |
-| `create_bug_report` | Files a new bug report into the store | `title`, `description`, `type`, `severity`, `stepsToReproduce`, `environment`, `logs`, `relatedFiles` |
-| `add_investigation_note` | Records an AI hypothesis, technical note, or proposed fix | `bugId`, `hypothesis`, `details`, `suggestedFix`, `author` |
-| `update_bug_status` | Updates bug lifecycle state | `bugId`, `status` (`"New"`, `"In Progress"`, `"Resolved"`, etc.) |
-
-### Resources
-- `bugs://all` — Full JSON payload of all currently tracked bug reports.
-- `bugs://{id}` — Raw JSON payload of an individual bug report by ID.
-
-### Prompts
-- `investigate_bug` — Interactive prompt guiding an AI agent through a systematic 5-step root-cause analysis workflow.
-
----
-
-## 🚀 Getting Started
-
-### 1. Install & Build
+Run the complete full-stack environment (Frontend, Backend, Prometheus, Grafana) with Docker Compose:
 
 ```bash
-cd mcp-server
-npm install
+# 1. Copy environment variables
 cp .env.example .env
-npm run build
+
+# 2. Start all containers
+docker compose up -d
 ```
 
-`BUG_PILOT_API_URL` defaults to `http://localhost:3001/api`, so `.env` is optional
-when the API runs on the default port.
+| Service | URL | Default Credentials |
+| :--- | :--- | :--- |
+| **Frontend App** | [http://localhost:8080](http://localhost:8080) | — |
+| **Backend API** | [http://localhost:3001](http://localhost:3001) | — |
+| **Grafana Dashboard** | [http://localhost:3000](http://localhost:3000) | `admin` / `admin` |
+| **Prometheus Metrics** | [http://localhost:9090](http://localhost:9090) | — |
 
-### 2. Run Standalone Tests
+---
 
-Start the Bug Pilot API first (from the repository root: `npm run dev:server`).
-The MCP server is an API client, so the API must be reachable.
+### Option B: Local Node.js Development
 
-Verify that the MCP server starts, connects via stdio, and responds to all tool calls:
+#### 1. Prerequisites
+- Node.js 18+ & npm
+- MongoDB instance (MongoDB Atlas or local `mongodb://localhost:27017/bugpilot`)
 
+#### 2. Install & Configure
 ```bash
-npm test
+# Clone and enter repo
+git clone https://github.com/tanishpx/Bug_pilot.git
+cd Bug_Pilot
+
+# Copy environment variables
+cp .env.example .env
+
+# Install dependencies (app & MCP server)
+npm install
+npm --prefix mcp-server install
 ```
 
-The verification asserts and exits non-zero on failure; it does not just print
-diagnostics. It creates a temporary bug through the MCP tool, reads it back
-through every tool, resource, and prompt, compares the registered catalog to
-`mcp.manifest.json`, rejects unknown IDs and invalid input, checks that startup
-fails fast against an unreachable API, and deletes the fixture through the REST
-seam. A failed cleanup fails the run.
-
-### 3. Development Mode
-
-Run directly with TypeScript hot-execution:
-
+#### 3. Seed Database & Start
 ```bash
+# Seed development data and indexes
+npm run db:seed
+
+# Start both backend and frontend concurrently
 npm run dev
 ```
 
+- **Frontend**: [http://localhost:5173](http://localhost:5173)
+- **Backend API**: [http://localhost:3001](http://localhost:3001)
+- **Health Check**: [http://localhost:3001/api/health](http://localhost:3001/api/health)
+
 ---
 
-## 🔌 Connecting to AI Clients
+## 📊 Observability & Monitoring (Grafana + Prometheus)
 
-To use this MCP server with your AI assistant (e.g., Claude Desktop, Antigravity, Cursor, Windsurf, or MCP Inspector):
+Bug Pilot features built-in APM (Application Performance Monitoring) and telemetry:
 
-### Configuration snippet (`mcpServers`)
+- **Metrics Instrumentation**: Express middleware in `server/middleware/metrics.js` tracks request throughput, response latency histograms (p50/p95/p99), status code distributions, active in-flight requests, and Node.js process internals (heap memory, event loop lag, CPU load).
+- **Metrics Endpoint**: Exposed at `GET /metrics` in Prometheus format.
+- **Auto-Provisioning**: Grafana automatically loads the datasource and pre-built dashboard on startup.
+
+### Running Monitoring Only
+```bash
+docker compose -f monitoring/docker-compose.monitoring.yml up -d
+```
+Access Grafana at [http://localhost:3000](http://localhost:3000).
+
+### Dashboard Previews
+
+#### Light Mode
+![Grafana Dashboard Light Mode](monitoring/assets/grafana-dashboard-light.png)
+
+#### Dark Mode
+![Grafana Dashboard Dark Mode](monitoring/assets/grafana-dashboard-screenshot.png)
+
+---
+
+## 🔌 AI Assistant (MCP) Integration
+
+Bug Pilot integrates Model Context Protocol (MCP) to let AI assistants (Claude Code, Cursor, Antigravity, etc.) triage, inspect, and update bugs directly through the REST API.
+
+1. Open **Settings → AI Assistant (MCP)** in the Admin Console.
+2. The Settings panel displays live MCP build readiness, database status, and generates client configuration:
 
 ```json
 {
   "mcpServers": {
     "bug-pilot": {
       "command": "node",
-      "args": [
-        "/home/tanish4181/Projects/Bug_Pilot/mcp-server/dist/index.js"
-      ],
+      "args": ["/absolute/path/to/Bug_Pilot/mcp-server/dist/index.js"],
       "env": {
         "BUG_PILOT_API_URL": "http://localhost:3001/api",
         "BUG_PILOT_USER_ID": "your-admin-user-id"
@@ -129,27 +112,91 @@ To use this MCP server with your AI assistant (e.g., Claude Desktop, Antigravity
 }
 ```
 
+### Available MCP Tools
+- `get_bug_context`: Fetches complete defect context (environment, logs, steps, notes).
+- `list_bugs`: Searches/filters bugs by status, severity, or keyword.
+- `create_bug_report`: Creates a new persistent bug record.
+- `add_investigation_note`: Appends diagnostic hypotheses and fix proposals.
+- `update_bug_status`: Transitions bug lifecycles (`New`, `In Progress`, `Resolved`, `Closed`).
+
 ---
 
-## 🔗 Architecture: the API is the Bug module
+## 📄 Automated Report Generation
 
-The MCP server does not talk to MongoDB. It calls the Express API, which is the
-single owner of Bug validation, identifier lookup, lifecycle transitions,
-investigation notes, and persistence. This means:
+Generate formatted PDF progress reports directly from Git commit telemetry:
 
-- `BUG_PILOT_API_URL` must point at a running API (default `http://localhost:3001/api`).
-- The MCP server fails fast at startup if the API is unreachable.
-- MCP-originated requests carry `X-MCP-Agent: bug-pilot-mcp`; the API can reject
-  them when the admin disables MCP in **Settings → AI Assistant (MCP)**.
-- No `MONGODB_URI` or `DATA_SOURCE_MODE` is needed in the MCP client environment.
+```bash
+# Generate full project report (captures all commits across history)
+.venv/bin/python generate_reports.py final
 
-### API contract used by the client
+# Generate weekly report (last 7 days)
+.venv/bin/python generate_reports.py weekly
 
-| Method | Endpoint | Purpose |
-|--------|----------|---------|
-| `GET` | `/bugs` | List/search bugs |
-| `GET` | `/bugs/:id` | Fetch one bug with investigation notes |
-| `POST` | `/bugs` | Create a bug |
-| `PUT` | `/bugs/:id` | Update status or fields |
-| `POST` | `/bugs/:id/notes` | Append an investigation note |
-| `DELETE` | `/bugs/:id` | Delete a verification fixture |
+# Generate monthly report (last 30 days)
+.venv/bin/python generate_reports.py monthly
+```
+*Generated reports are saved in the project root as `Bug_Pilot_<Interval>_Report_<Date>.pdf`.*
+
+---
+
+## 🧪 Testing & Verification
+
+Run the full end-to-end automated test suite:
+
+```bash
+# Run backend & database integration tests
+npm test
+
+# Run MCP test suite
+npm run mcp:test
+
+# TypeScript typecheck
+npm run typecheck
+
+# Production build
+npm run build
+```
+
+---
+
+## 🛠️ API Reference
+
+| Method | Endpoint | Description |
+|:---|:---|:---|
+| `GET` | `/health` | Health check & MongoDB connection status |
+| `GET` | `/metrics` | Prometheus metrics endpoint |
+| `GET` | `/api/bugs` | List bugs with filters (`status`, `severity`, `type`, `search`) |
+| `GET` | `/api/bugs/:id` | Get single bug by ID (e.g. `BUG-101`) or MongoDB `_id` |
+| `POST` | `/api/bugs` | Create a new bug report |
+| `PUT` | `/api/bugs/:id` | Update bug details or status |
+| `DELETE` | `/api/bugs/:id` | Delete bug report and associated investigation notes |
+| `GET` | `/api/bugs/:id/notes` | Get all investigation notes for a bug |
+| `POST` | `/api/bugs/:id/notes` | Add an investigation note to a bug |
+| `GET` | `/api/stats` | Aggregate dashboard statistics (status, severity, counts) |
+| `GET` | `/api/settings` | Load workspace settings and derived MCP status |
+| `PUT` | `/api/settings` | Update workspace settings |
+
+---
+
+## 📂 Project Structure
+
+```
+Bug_Pilot/
+├── Dockerfile                  # Frontend container build (Nginx SPA)
+├── Dockerfile.backend          # Backend container build (Node 20 Alpine)
+├── docker-compose.yml          # Full-stack orchestrator
+├── nginx.conf                  # Nginx client-side routing config
+├── generate_reports.py         # Automated PDF report generator
+├── monitoring/                 # Monitoring & Observability
+│   ├── docker-compose.monitoring.yml
+│   ├── prometheus.yml          # Prometheus scrape configuration
+│   ├── provisioning/           # Auto-provisioned Grafana datasources & dashboard
+│   └── assets/                 # Dashboard screenshots (Light/Dark mode)
+├── mcp-server/                 # Model Context Protocol (MCP) server
+├── server/                     # Express REST API & MongoDB models
+│   ├── controllers/            # Route controllers
+│   ├── middleware/             # Auth, MCP access, & Prometheus metrics
+│   ├── models/                 # Mongoose schemas
+│   └── routes/                 # API route declarations
+└── src/                        # Vite + React Admin Dashboard
+```

@@ -3,6 +3,7 @@ import { useParams, Link } from "react-router-dom";
 import { getPublicForm, submitFeedback, type PublicForm } from "../lib/api";
 import { BUG_TYPES, SEVERITIES, type BugType, type Severity } from "../lib/forms";
 import BrandMark from "../components/BrandMark";
+import { useTheme } from "../lib/theme";
 
 type FormState = "loading" | "form" | "success" | "not-found";
 
@@ -13,8 +14,28 @@ interface AttachedFile {
   dataUrl?: string;
 }
 
+const CATEGORY_ICONS: Record<string, string> = {
+  UI: "fa-palette",
+  Backend: "fa-server",
+  Logic: "fa-brain",
+  Performance: "fa-bolt",
+  Security: "fa-shield-halved",
+  Auth: "fa-key",
+  Other: "fa-circle-question",
+};
+
+const SEVERITY_INFO: Record<Severity, { label: string; desc: string; icon: string }> = {
+  Low: { label: "Low", desc: "Minor glitch / cosmetic", icon: "fa-circle-info" },
+  Medium: { label: "Medium", desc: "Feature impaired, workaround exists", icon: "fa-triangle-exclamation" },
+  High: { label: "High", desc: "Major flow blocked", icon: "fa-fire" },
+  Critical: { label: "Critical", desc: "System down / data loss", icon: "fa-skull-crossbones" },
+};
+
+const DRAFT_KEY_PREFIX = "bugpilot_form_draft_";
+
 export default function FeedbackFormPage() {
   const { formId } = useParams<{ formId: string }>();
+  const { dark, toggle } = useTheme();
   const [state, setState] = useState<FormState>("loading");
   const [form, setForm] = useState<PublicForm | null>(null);
 
@@ -28,6 +49,7 @@ export default function FeedbackFormPage() {
   const [reporterEmail, setReporterEmail] = useState("");
   const [attachments, setAttachments] = useState<AttachedFile[]>([]);
   const [isDragging, setIsDragging] = useState(false);
+  const [hasRestoredDraft, setHasRestoredDraft] = useState(false);
 
   // Submission handling
   const [submitting, setSubmitting] = useState(false);
@@ -35,24 +57,94 @@ export default function FeedbackFormPage() {
   const [submissionId, setSubmissionId] = useState("");
   const [submittedTitle, setSubmittedTitle] = useState("");
   const [copied, setCopied] = useState(false);
+  const [activeStepTab, setActiveStepTab] = useState<1 | 2 | 3>(1);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const errorRef = useRef<HTMLDivElement>(null);
 
-  // Bring server-side / validation errors into view on small screens.
+  const draftStorageKey = formId ? `${DRAFT_KEY_PREFIX}${formId}` : null;
+
+  // Restore saved draft from localStorage
+  useEffect(() => {
+    if (!draftStorageKey) return;
+    try {
+      const saved = localStorage.getItem(draftStorageKey);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.bugTitle) setBugTitle(parsed.bugTitle);
+        if (parsed.bugDescription) setBugDescription(parsed.bugDescription);
+        if (parsed.stepsToReproduce) setStepsToReproduce(parsed.stepsToReproduce);
+        if (parsed.severity) setSeverity(parsed.severity);
+        if (parsed.bugType) setBugType(parsed.bugType);
+        if (parsed.environment) setEnvironment(parsed.environment);
+        if (parsed.reporterEmail) setReporterEmail(parsed.reporterEmail);
+        setHasRestoredDraft(true);
+      }
+    } catch {
+      // ignore
+    }
+  }, [draftStorageKey]);
+
+  // Auto-save draft
+  useEffect(() => {
+    if (!draftStorageKey || state !== "form") return;
+    const timeout = setTimeout(() => {
+      if (bugTitle || bugDescription || stepsToReproduce || reporterEmail) {
+        localStorage.setItem(
+          draftStorageKey,
+          JSON.stringify({
+            bugTitle,
+            bugDescription,
+            stepsToReproduce,
+            severity,
+            bugType,
+            environment,
+            reporterEmail,
+          })
+        );
+      }
+    }, 600);
+    return () => clearTimeout(timeout);
+  }, [draftStorageKey, state, bugTitle, bugDescription, stepsToReproduce, severity, bugType, environment, reporterEmail]);
+
+  // Bring server-side / validation errors into view
   useEffect(() => {
     if (errorMsg && errorRef.current) {
       errorRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
     }
   }, [errorMsg]);
 
-  // Required-field completion shown as a slim progress bar under the header.
-  const completedSteps = [
-    bugTitle.trim(),
-    bugDescription.trim(),
-    stepsToReproduce.trim(),
+  // Global paste support (Ctrl+V) for instant screenshot uploads
+  useEffect(() => {
+    const handlePaste = (e: ClipboardEvent) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      const imageFiles: File[] = [];
+      for (let i = 0; i < items.length; i++) {
+        if (items[i].type.startsWith("image/")) {
+          const file = items[i].getAsFile();
+          if (file) imageFiles.push(file);
+        }
+      }
+      if (imageFiles.length > 0) {
+        handleFilesSelected(imageFiles);
+      }
+    };
+    window.addEventListener("paste", handlePaste);
+    return () => window.removeEventListener("paste", handlePaste);
+  }, [attachments]);
+
+  // Required-field completion
+  const step1Complete = Boolean(bugTitle.trim() && severity && bugType);
+  const step2Complete = Boolean(bugDescription.trim() && stepsToReproduce.trim());
+  const step3Complete = Boolean(environment.trim() || reporterEmail.trim() || attachments.length > 0);
+
+  const completedStepsCount = [
+    Boolean(bugTitle.trim()),
+    Boolean(bugDescription.trim()),
+    Boolean(stepsToReproduce.trim()),
   ].filter(Boolean).length;
-  const progressPercent = Math.round((completedSteps / 3) * 100);
+  const progressPercent = Math.round((completedStepsCount / 3) * 100);
 
   useEffect(() => {
     if (!formId) return;
@@ -66,7 +158,7 @@ export default function FeedbackFormPage() {
         if (data.bugType && BUG_TYPES.includes(data.bugType as BugType)) {
           setBugType(data.bugType as BugType);
         }
-        if (data.environment) {
+        if (data.environment && !environment) {
           setEnvironment(data.environment);
         }
         setState("form");
@@ -77,32 +169,39 @@ export default function FeedbackFormPage() {
   }, [formId]);
 
   const handleAutoDetectSystem = () => {
-    const userAgent = navigator.userAgent;
+    const ua = navigator.userAgent;
     let browser = "Browser";
     let os = "OS";
 
-    if (userAgent.includes("Win")) os = "Windows";
-    else if (userAgent.includes("Mac")) os = "macOS";
-    else if (userAgent.includes("Linux")) os = "Linux";
-    else if (userAgent.includes("Android")) os = "Android";
-    else if (userAgent.includes("like Mac")) os = "iOS";
+    if (ua.includes("Win")) os = "Windows";
+    else if (ua.includes("Mac")) os = "macOS";
+    else if (ua.includes("Linux")) os = "Linux";
+    else if (ua.includes("Android")) os = "Android";
+    else if (ua.includes("like Mac")) os = "iOS";
 
-    if (userAgent.includes("Edg/")) browser = "Edge";
-    else if (userAgent.includes("Chrome/") && !userAgent.includes("Edg/")) browser = "Chrome";
-    else if (userAgent.includes("Safari/") && !userAgent.includes("Chrome/")) browser = "Safari";
-    else if (userAgent.includes("Firefox/")) browser = "Firefox";
+    if (ua.includes("Edg/")) browser = "Edge";
+    else if (ua.includes("Chrome/") && !ua.includes("Edg/")) browser = "Chrome";
+    else if (ua.includes("Safari/") && !ua.includes("Chrome/")) browser = "Safari";
+    else if (ua.includes("Firefox/")) browser = "Firefox";
 
-    const screenRes = `${window.screen.width}x${window.screen.height}`;
-    const detected = `${browser} on ${os} (${screenRes})`;
+    const screenRes = `${window.screen.width}×${window.screen.height}`;
+    const detected = `${browser} on ${os} (${screenRes}, ${navigator.language})`;
     setEnvironment(detected);
   };
 
-  const handleInsertStepsTemplate = () => {
-    const template = `1. Navigate to: \n2. Action performed: \n3. Observed bug: \n4. Expected outcome: `;
-    setStepsToReproduce((prev) => (prev.trim() ? prev + "\n\n" + template : template));
+  const handleInsertTemplate = (type: "standard" | "crash" | "visual") => {
+    let tpl = "";
+    if (type === "standard") {
+      tpl = `1. Navigate to: \n2. Action performed: \n3. Observed bug: \n4. Expected outcome: `;
+    } else if (type === "crash") {
+      tpl = `1. Trigger: \n2. Error / Stack Trace:\n3. Reload behavior: `;
+    } else {
+      tpl = `1. Component / Element: \n2. Viewport / Screen: \n3. Visual artifact: `;
+    }
+    setStepsToReproduce((prev) => (prev.trim() ? prev + "\n\n" + tpl : tpl));
   };
 
-  const handleFilesSelected = (files: FileList | null) => {
+  const handleFilesSelected = (files: FileList | File[] | null) => {
     if (!files) return;
     const maxFiles = 5;
     const maxSize = 10 * 1024 * 1024; // 10MB
@@ -113,28 +212,26 @@ export default function FeedbackFormPage() {
       return;
     }
 
-    Array.from(files)
-      .slice(0, remaining)
-      .forEach((file) => {
-        if (file.size > maxSize) {
-          setErrorMsg(`File "${file.name}" exceeds maximum allowed size of 10MB.`);
-          return;
-        }
+    const fileArray = Array.isArray(files) ? files : Array.from(files);
 
-        const reader = new FileReader();
-        reader.onload = () => {
-          const newFile: AttachedFile = {
-            name: file.name,
-            size: file.size,
-            type: file.type,
-            dataUrl: reader.result as string,
-          };
-          setAttachments((prev) =>
-            prev.length >= maxFiles ? prev : [...prev, newFile]
-          );
+    fileArray.slice(0, remaining).forEach((file) => {
+      if (file.size > maxSize) {
+        setErrorMsg(`File "${file.name}" exceeds maximum allowed size of 10MB.`);
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = () => {
+        const newFile: AttachedFile = {
+          name: file.name || `screenshot-${Date.now()}.png`,
+          size: file.size,
+          type: file.type || "image/png",
+          dataUrl: reader.result as string,
         };
-        reader.readAsDataURL(file);
-      });
+        setAttachments((prev) => (prev.length >= maxFiles ? prev : [...prev, newFile]));
+      };
+      reader.readAsDataURL(file);
+    });
   };
 
   const handleRemoveAttachment = (index: number) => {
@@ -147,22 +244,31 @@ export default function FeedbackFormPage() {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
+  const clearDraft = () => {
+    if (draftStorageKey) localStorage.removeItem(draftStorageKey);
+    setHasRestoredDraft(false);
+    handleResetForm();
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formId || submitting) return;
 
     if (!bugTitle.trim()) {
-      setErrorMsg("Please enter a title / summary for the bug.");
+      setErrorMsg("Please enter a summary title for the bug.");
+      setActiveStepTab(1);
       return;
     }
 
     if (!bugDescription.trim()) {
-      setErrorMsg("Please provide a description of the bug.");
+      setErrorMsg("Please describe what happened in detail.");
+      setActiveStepTab(2);
       return;
     }
 
     if (!stepsToReproduce.trim()) {
       setErrorMsg("Please provide steps to reproduce the issue.");
+      setActiveStepTab(2);
       return;
     }
 
@@ -182,12 +288,13 @@ export default function FeedbackFormPage() {
         attachments: attachments.map((a) => a.dataUrl || a.name),
       });
 
+      if (draftStorageKey) localStorage.removeItem(draftStorageKey);
       setSubmissionId(res.id || `SUB-${Date.now().toString().slice(-6)}`);
       setSubmittedTitle(bugTitle.trim());
       setState("success");
     } catch (err) {
       setErrorMsg(
-        err instanceof Error ? err.message : "Submission failed. Please try again."
+        err instanceof Error ? err.message : "Submission failed. Please check your connection and retry."
       );
     } finally {
       setSubmitting(false);
@@ -204,390 +311,587 @@ export default function FeedbackFormPage() {
     setReporterEmail("");
     setAttachments([]);
     setErrorMsg("");
+    setActiveStepTab(1);
     setState("form");
   };
 
-  if (state === "loading") {
-    return (
-      <div className="gate">
-        <BrandMark />
-        <p>Loading form...</p>
-      </div>
-    );
-  }
-
-  if (state === "not-found") {
-    return (
-      <div className="gate">
-        <BrandMark />
-        <h1>Form not found</h1>
-        <p>
-          This feedback form doesn't exist, is set to private, or is no
-          longer active.
-        </p>
-        <Link to="/" className="btn primary lg">
-          Go home
-        </Link>
-      </div>
-    );
-  }
-
-  if (state === "success") {
-    return (
-      <div className="saas-container">
-        <div className="saas-card saas-success-card">
-          <div className="saas-success-icon-wrap">
-            <i className="fa-solid fa-circle-check saas-success-icon"></i>
-          </div>
-          <h1 className="saas-title" style={{ textAlign: "center", marginBottom: "8px" }}>
-            Report received.
-          </h1>
-          <p className="saas-subtitle" style={{ textAlign: "center", marginBottom: "24px" }}>
-            Your report is in the queue. Keep the submission ID — it is the fastest
-            way for the team to find this record.
-          </p>
-
-          <div className="saas-receipt-card">
-            <div className="saas-receipt-row">
-              <span className="saas-receipt-label">Submission ID</span>
-              <div className="saas-receipt-copy">
-                <code>#{submissionId}</code>
-                <button
-                  type="button"
-                  className="saas-copy-badge-btn"
-                  onClick={() => {
-                    navigator.clipboard.writeText(submissionId);
-                    setCopied(true);
-                    setTimeout(() => setCopied(false), 2000);
-                  }}
-                >
-                  {copied ? "Copied!" : "Copy"}
-                </button>
-              </div>
+  return (
+    <div className="portal-wrapper">
+      {/* Top Navbar */}
+      <header className="portal-nav">
+        <div className="portal-nav-inner">
+          <Link to="/" className="portal-brand" title="BugPilot Home">
+            <BrandMark className="portal-brand-logo" />
+            <div className="portal-brand-text">
+              <span className="portal-brand-name">BugPilot</span>
+              <span className="portal-brand-tag">Defect Intake Portal</span>
             </div>
-            {submittedTitle && (
-              <div className="saas-receipt-row">
-                <span className="saas-receipt-label">Issue Title</span>
-                <span className="saas-receipt-value">{submittedTitle}</span>
-              </div>
-            )}
-            <div className="saas-receipt-row">
-              <span className="saas-receipt-label">Severity</span>
-              <span className={`badge sev-${severity.toLowerCase()}`}>{severity}</span>
-            </div>
-            <div className="saas-receipt-row">
-              <span className="saas-receipt-label">Bug Category</span>
-              <span className="badge badge-type">{bugType}</span>
-            </div>
-            <div className="saas-receipt-row">
-              <span className="saas-receipt-label">Status</span>
-              <span className="badge status-open">New</span>
-            </div>
-          </div>
+          </Link>
 
-          <div className="saas-actions" style={{ justifyContent: "center", gap: "16px", marginTop: "28px" }}>
+          <div className="portal-nav-actions">
+            <div className="portal-status-pill">
+              <span className="portal-status-dot"></span>
+              <span>Intake Live</span>
+            </div>
             <button
               type="button"
-              className="saas-btn secondary"
-              onClick={handleResetForm}
+              className="portal-theme-btn"
+              onClick={toggle}
+              title={`Switch to ${dark ? "light" : "dark"} theme`}
+              aria-label="Toggle theme"
             >
-              <i className="fa-solid fa-plus"></i> Submit another report
+              <i className={`fa-solid ${dark ? "fa-sun" : "fa-moon"}`}></i>
             </button>
-            <Link to="/" className="saas-btn primary">
-              <i className="fa-solid fa-house"></i> Return home
+            <Link to="/" className="portal-exit-btn">
+              <i className="fa-solid fa-arrow-left"></i>
+              <span>Exit</span>
             </Link>
           </div>
         </div>
-      </div>
-    );
-  }
+      </header>
 
-  return (
-    <div className="saas-container">
-      <div className="saas-card">
-        {/* Form Header */}
-        <div className="saas-header">
-          <div className="saas-header-top">
-            <span className="saas-badge">
-              <i className="fa-solid fa-bug" style={{ marginRight: "6px" }}></i>
-              {form?.bugType ? `${form.bugType.toUpperCase()} REPORT` : "BUG REPORT"}
-            </span>
-            {form?.formId && (
-              <span className="saas-form-tag">ID: {form.formId}</span>
-            )}
+      {/* Main Body */}
+      <main className="portal-main">
+        {state === "loading" && (
+          <div className="portal-card portal-loading-state">
+            <div className="portal-spinner"></div>
+            <h3>Loading defect intake form...</h3>
+            <p>Connecting to secure incident workspace</p>
           </div>
-          <h1 className="saas-title">{form?.title || "Submit a bug report"}</h1>
-          <p className="saas-subtitle">
-            {form?.description || "Help us squash bugs by providing clear and detailed information."}
-          </p>
-          <div
-            className="saas-progress"
-            role="progressbar"
-            aria-valuenow={progressPercent}
-            aria-valuemin={0}
-            aria-valuemax={100}
-            title={`${completedSteps} of 3 required fields complete`}
-          >
-            <div
-              className="saas-progress-fill"
-              style={{ width: `${progressPercent}%` }}
-            />
-          </div>
-        </div>
+        )}
 
-        <form className="saas-form" onSubmit={handleSubmit}>
-          <div className="saas-grid-2">
-            {/* Title / Summary Field */}
-            <div className="saas-field full-width">
-              <label className="saas-label">
-                <span>Issue Title / Summary *</span>
-                <span className="saas-char-counter">{bugTitle.length} / 120</span>
-              </label>
-              <input
-                type="text"
-                className="saas-input"
-                value={bugTitle}
-                maxLength={120}
-                onChange={(e) => setBugTitle(e.target.value)}
-                placeholder="e.g. Checkout payment button unresponsive on iOS Safari"
-                required
-              />
-              <span className="saas-helper">
-                A concise summary that helps developers quickly identify the problem.
-              </span>
+        {state === "not-found" && (
+          <div className="portal-card portal-empty-state">
+            <div className="portal-empty-icon">
+              <i className="fa-solid fa-file-circle-question"></i>
+            </div>
+            <h2>Form Not Available</h2>
+            <p>
+              This defect intake channel does not exist, has expired, or was set to private by the engineering team.
+            </p>
+            <div className="portal-empty-actions">
+              <Link to="/" className="portal-btn primary">
+                <i className="fa-solid fa-house"></i> Return to BugPilot Home
+              </Link>
+            </div>
+          </div>
+        )}
+
+        {state === "success" && (
+          <div className="portal-card portal-success-card">
+            <div className="portal-success-header">
+              <div className="portal-success-badge">
+                <i className="fa-solid fa-circle-check"></i>
+              </div>
+              <h2>Incident Report Submitted</h2>
+              <p>Your defect has been logged into the queue and assigned for engineering triage.</p>
             </div>
 
-            {/* Severity Field */}
-            <div className="saas-field">
-              <label className="saas-label">
-                <span>Severity Level *</span>
-              </label>
-              <div className="saas-severity-picker">
-                {SEVERITIES.map((s) => (
+            <div className="portal-receipt">
+              <div className="portal-receipt-header">
+                <span>INCIDENT RECEIPT</span>
+                <span className="portal-receipt-stamp">VERIFIED</span>
+              </div>
+              <div className="portal-receipt-row highlight">
+                <span className="portal-receipt-key">Tracking ID</span>
+                <div className="portal-receipt-val copyable">
+                  <code>#{submissionId}</code>
                   <button
-                    key={s}
                     type="button"
-                    className={`saas-severity-btn sev-${s.toLowerCase()} ${severity === s ? "active" : ""}`}
-                    onClick={() => setSeverity(s)}
+                    className="portal-copy-btn"
+                    onClick={() => {
+                      navigator.clipboard.writeText(submissionId);
+                      setCopied(true);
+                      setTimeout(() => setCopied(false), 2000);
+                    }}
                   >
-                    <span className="sev-indicator"></span>
-                    {s}
+                    <i className={`fa-solid ${copied ? "fa-check" : "fa-copy"}`}></i>
+                    <span>{copied ? "Copied" : "Copy"}</span>
                   </button>
-                ))}
+                </div>
               </div>
-              <span className="saas-helper">Impact level of this issue on your workflow.</span>
-            </div>
 
-            {/* Bug Type Field */}
-            <div className="saas-field">
-              <label className="saas-label">
-                <span>Category / Bug Type *</span>
-              </label>
-              <select
-                className="saas-select"
-                value={bugType}
-                onChange={(e) => setBugType(e.target.value as BugType)}
-              >
-                {BUG_TYPES.map((t) => (
-                  <option key={t} value={t}>
-                    {t}
-                  </option>
-                ))}
-              </select>
-              <span className="saas-helper">Select the category that best matches this bug.</span>
-            </div>
+              {submittedTitle && (
+                <div className="portal-receipt-row">
+                  <span className="portal-receipt-key">Summary</span>
+                  <span className="portal-receipt-val">{submittedTitle}</span>
+                </div>
+              )}
 
-            {/* Describe the Bug Field */}
-            <div className="saas-field full-width">
-              <label className="saas-label">
-                <span>Describe the Bug *</span>
-                <span className="saas-char-counter">
-                  {bugDescription.length} / 1000
+              <div className="portal-receipt-row">
+                <span className="portal-receipt-key">Severity & Type</span>
+                <div className="portal-receipt-val">
+                  <span className={`badge sev-${severity.toLowerCase()}`} style={{ marginRight: "6px" }}>
+                    {severity}
+                  </span>
+                  <span className="badge badge-type">{bugType}</span>
+                </div>
+              </div>
+
+              <div className="portal-receipt-row">
+                <span className="portal-receipt-key">Status</span>
+                <span className="portal-receipt-val">
+                  <span className="badge status-open">Queued for Triage</span>
                 </span>
-              </label>
-              <textarea
-                className="saas-textarea"
-                rows={5}
-                maxLength={1000}
-                value={bugDescription}
-                onChange={(e) => setBugDescription(e.target.value)}
-                placeholder="What happened? What did you expect to happen instead?"
-                required
-              />
-            </div>
-
-            {/* Steps to Reproduce Field */}
-            <div className="saas-field full-width">
-              <div className="saas-label-with-action">
-                <label className="saas-label">
-                  <span>Steps to Reproduce *</span>
-                </label>
-                <button
-                  type="button"
-                  className="saas-inline-btn"
-                  onClick={handleInsertStepsTemplate}
-                >
-                  <i className="fa-solid fa-list-ol"></i> Insert Template
-                </button>
               </div>
-              <textarea
-                className="saas-textarea"
-                rows={4}
-                value={stepsToReproduce}
-                onChange={(e) => setStepsToReproduce(e.target.value)}
-                placeholder="1. Go to page...&#10;2. Click on button...&#10;3. Observe error message..."
-                required
-              />
-              <span className="saas-helper">
-                Step-by-step instructions so the team can recreate and fix the issue.
-              </span>
             </div>
 
-            {/* Device / Environment Field */}
-            <div className="saas-field">
-              <div className="saas-label-with-action">
-                <label className="saas-label">
-                  <span>Device & Environment</span>
-                </label>
-                <button
-                  type="button"
-                  className="saas-inline-btn"
-                  onClick={handleAutoDetectSystem}
-                  title="Auto-detect operating system, browser, and screen size"
-                >
-                  <i className="fa-solid fa-wand-magic-sparkles"></i> Auto-detect
-                </button>
-              </div>
-              <input
-                type="text"
-                className="saas-input"
-                value={environment}
-                onChange={(e) => setEnvironment(e.target.value)}
-                placeholder="e.g. Chrome 122 on Windows 11, iPhone 15 iOS 17"
-              />
-              <span className="saas-helper">Browser, OS, device, or screen resolution.</span>
-            </div>
-
-            {/* Email Field */}
-            <div className="saas-field">
-              <label className="saas-label">
-                <span>Reporter Email (optional)</span>
-              </label>
-              <input
-                type="email"
-                className="saas-input"
-                value={reporterEmail}
-                onChange={(e) => setReporterEmail(e.target.value)}
-                placeholder="you@example.com"
-              />
-              <span className="saas-helper">Optional. Used only if the team needs to follow up on this report.</span>
-            </div>
-
-            {/* Attachments Field */}
-            <div className="saas-field full-width">
-              <label className="saas-label">
-                <span>Screenshots & Attachments (optional)</span>
-                <span className="saas-char-counter">{attachments.length} / 5 files</span>
-              </label>
-
-              <input
-                type="file"
-                ref={fileInputRef}
-                multiple
-                accept="image/*,video/*,.pdf,.txt,.log,.json"
-                style={{ display: "none" }}
-                onChange={(e) => {
-                  handleFilesSelected(e.target.files);
-                  if (e.target) e.target.value = "";
-                }}
-              />
-
-              <div
-                className={`saas-upload-area ${isDragging ? "dragging" : ""}`}
-                onClick={() => fileInputRef.current?.click()}
-                onDragOver={(e) => {
-                  e.preventDefault();
-                  setIsDragging(true);
-                }}
-                onDragLeave={() => setIsDragging(false)}
-                onDrop={(e) => {
-                  e.preventDefault();
-                  setIsDragging(false);
-                  handleFilesSelected(e.dataTransfer.files);
-                }}
-              >
-                <i className="fa-solid fa-cloud-arrow-up saas-upload-icon"></i>
-                <div className="saas-upload-title">
-                  Drag & drop screenshots or logs here, or <span>browse files</span>
+            <div className="portal-next-steps">
+              <div className="portal-step-item">
+                <i className="fa-solid fa-robot"></i>
+                <div>
+                  <strong>AI Diagnostics Triggered</strong>
+                  <p>MCP agents and triage bots will inspect reproduction telemetry.</p>
                 </div>
-                <div className="saas-upload-subtitle">
-                  Supports PNG, JPG, GIF, MP4, PDF, LOG (up to 10MB per file)
+              </div>
+              <div className="portal-step-item">
+                <i className="fa-solid fa-user-check"></i>
+                <div>
+                  <strong>Engineer Review</strong>
+                  <p>A triage engineer will confirm severity and prioritize fixes.</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="portal-success-actions">
+              <button type="button" className="portal-btn secondary" onClick={handleResetForm}>
+                <i className="fa-solid fa-plus"></i> Submit Another Report
+              </button>
+              <Link to="/" className="portal-btn primary">
+                <i className="fa-solid fa-house"></i> Done
+              </Link>
+            </div>
+          </div>
+        )}
+
+        {state === "form" && (
+          <div className="portal-card">
+            {/* Header info */}
+            <div className="portal-header">
+              <div className="portal-header-meta">
+                <span className="portal-tag">
+                  <i className="fa-solid fa-bug"></i>
+                  {form?.bugType ? `${form.bugType} REPORT` : "DEFECT REPORT"}
+                </span>
+                {form?.formId && <span className="portal-id-chip">Channel: {form.formId}</span>}
+              </div>
+
+              <h1 className="portal-title">{form?.title || "Submit a Defect Report"}</h1>
+              <p className="portal-subtitle">
+                {form?.description ||
+                  "Provide precise steps and details so the engineering team can swiftly diagnose, isolate, and resolve this defect."}
+              </p>
+
+              {/* Progress and Stepper */}
+              <div className="portal-progress-wrapper">
+                <div className="portal-progress-meta">
+                  <span className="portal-progress-label">
+                    Form Completion: <strong>{progressPercent}%</strong>
+                  </span>
+                  <span className="portal-progress-count">
+                    {completedStepsCount} of 3 required fields complete
+                  </span>
+                </div>
+                <div className="portal-progress-bar">
+                  <div
+                    className="portal-progress-bar-fill"
+                    style={{ width: `${progressPercent}%` }}
+                  ></div>
                 </div>
               </div>
 
-              {attachments.length > 0 && (
-                <div className="saas-file-list">
-                  {attachments.map((file, idx) => (
-                    <div key={idx} className="saas-file-chip">
-                      {file.type.startsWith("image/") && file.dataUrl ? (
-                        <img src={file.dataUrl} alt={file.name} className="saas-file-thumb" />
-                      ) : (
-                        <i className="fa-solid fa-file-lines saas-file-icon"></i>
-                      )}
-                      <div className="saas-file-info">
-                        <span className="saas-file-name" title={file.name}>
-                          {file.name}
-                        </span>
-                        <span className="saas-file-size">{formatFileSize(file.size)}</span>
-                      </div>
+              {/* Step Tabs for quick UX navigation */}
+              <div className="portal-step-tabs">
+                <button
+                  type="button"
+                  className={`portal-tab-btn ${activeStepTab === 1 ? "active" : ""} ${step1Complete ? "completed" : ""}`}
+                  onClick={() => setActiveStepTab(1)}
+                >
+                  <span className="tab-number">
+                    {step1Complete ? <i className="fa-solid fa-check"></i> : "1"}
+                  </span>
+                  <span>1. Overview</span>
+                </button>
+                <button
+                  type="button"
+                  className={`portal-tab-btn ${activeStepTab === 2 ? "active" : ""} ${step2Complete ? "completed" : ""}`}
+                  onClick={() => setActiveStepTab(2)}
+                >
+                  <span className="tab-number">
+                    {step2Complete ? <i className="fa-solid fa-check"></i> : "2"}
+                  </span>
+                  <span>2. Reproduction</span>
+                </button>
+                <button
+                  type="button"
+                  className={`portal-tab-btn ${activeStepTab === 3 ? "active" : ""} ${step3Complete ? "completed" : ""}`}
+                  onClick={() => setActiveStepTab(3)}
+                >
+                  <span className="tab-number">
+                    {step3Complete ? <i className="fa-solid fa-check"></i> : "3"}
+                  </span>
+                  <span>3. Context & Files</span>
+                </button>
+              </div>
+
+              {hasRestoredDraft && (
+                <div className="portal-draft-banner">
+                  <div className="draft-banner-text">
+                    <i className="fa-solid fa-clock-rotate-left"></i>
+                    <span>Restored unfinished draft from your browser.</span>
+                  </div>
+                  <button type="button" className="draft-discard-btn" onClick={clearDraft}>
+                    Discard Draft
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Form */}
+            <form className="portal-form" onSubmit={handleSubmit}>
+              {/* SECTION 1: OVERVIEW */}
+              <div className={`portal-section ${activeStepTab === 1 ? "tab-active" : ""}`}>
+                <div className="section-legend">
+                  <span className="section-pill">STEP 1</span>
+                  <h3>Defect Overview & Classification</h3>
+                </div>
+
+                <div className="portal-field">
+                  <label className="portal-label">
+                    <span className="label-text">
+                      Issue Summary <span className="req">*</span>
+                    </span>
+                    <span className="portal-char-count">{bugTitle.length} / 120</span>
+                  </label>
+                  <input
+                    type="text"
+                    className="portal-input title-input"
+                    value={bugTitle}
+                    maxLength={120}
+                    onChange={(e) => setBugTitle(e.target.value)}
+                    placeholder="e.g. Checkout payment button unresponsive on iOS Safari 17"
+                    required
+                  />
+                  <span className="portal-hint">
+                    Write a concise, one-sentence description of the problem.
+                  </span>
+                </div>
+
+                {/* Severity Card Picker */}
+                <div className="portal-field">
+                  <label className="portal-label">
+                    <span className="label-text">
+                      Severity Level <span className="req">*</span>
+                    </span>
+                    <span className="portal-hint-badge">Choose user impact</span>
+                  </label>
+                  <div className="severity-grid">
+                    {SEVERITIES.map((s) => {
+                      const info = SEVERITY_INFO[s];
+                      const isSel = severity === s;
+                      return (
+                        <button
+                          key={s}
+                          type="button"
+                          className={`severity-card sev-${s.toLowerCase()} ${isSel ? "selected" : ""}`}
+                          onClick={() => setSeverity(s)}
+                        >
+                          <div className="sev-card-top">
+                            <span className="sev-radio-dot"></span>
+                            <span className="sev-card-title">
+                              <i className={`fa-solid ${info.icon}`}></i> {info.label}
+                            </span>
+                          </div>
+                          <span className="sev-card-desc">{info.desc}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Bug Type Pills */}
+                <div className="portal-field">
+                  <label className="portal-label">
+                    <span className="label-text">
+                      Category / Defect Area <span className="req">*</span>
+                    </span>
+                  </label>
+                  <div className="category-pills">
+                    {BUG_TYPES.map((t) => {
+                      const icon = CATEGORY_ICONS[t] || "fa-tag";
+                      const isSel = bugType === t;
+                      return (
+                        <button
+                          key={t}
+                          type="button"
+                          className={`category-pill ${isSel ? "active" : ""}`}
+                          onClick={() => setBugType(t)}
+                        >
+                          <i className={`fa-solid ${icon}`}></i>
+                          <span>{t}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              {/* SECTION 2: REPRODUCTION & DETAILS */}
+              <div className={`portal-section ${activeStepTab === 2 ? "tab-active" : ""}`}>
+                <div className="section-legend">
+                  <span className="section-pill">STEP 2</span>
+                  <h3>Description & Reproduction Steps</h3>
+                </div>
+
+                {/* Description */}
+                <div className="portal-field">
+                  <label className="portal-label">
+                    <span className="label-text">
+                      Detailed Description <span className="req">*</span>
+                    </span>
+                    <span className="portal-char-count">{bugDescription.length} / 1000</span>
+                  </label>
+                  <textarea
+                    className="portal-textarea"
+                    rows={4}
+                    maxLength={1000}
+                    value={bugDescription}
+                    onChange={(e) => setBugDescription(e.target.value)}
+                    placeholder="Explain what happened, what behavior you observed, and what you expected to happen instead."
+                    required
+                  />
+                  <span className="portal-hint">
+                    Include context, error notices, or specific conditions where this happens.
+                  </span>
+                </div>
+
+                {/* Steps to Reproduce */}
+                <div className="portal-field">
+                  <div className="portal-label-row">
+                    <label className="portal-label">
+                      <span className="label-text">
+                        Steps to Reproduce <span className="req">*</span>
+                      </span>
+                    </label>
+                    <div className="template-pills">
+                      <span className="template-label">Templates:</span>
                       <button
                         type="button"
-                        className="saas-file-remove"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleRemoveAttachment(idx);
-                        }}
-                        title="Remove file"
+                        className="template-btn"
+                        onClick={() => handleInsertTemplate("standard")}
                       >
-                        ✕
+                        <i className="fa-solid fa-list-ol"></i> Standard
+                      </button>
+                      <button
+                        type="button"
+                        className="template-btn"
+                        onClick={() => handleInsertTemplate("crash")}
+                      >
+                        <i className="fa-solid fa-bolt"></i> Crash
+                      </button>
+                      <button
+                        type="button"
+                        className="template-btn"
+                        onClick={() => handleInsertTemplate("visual")}
+                      >
+                        <i className="fa-solid fa-eye"></i> UI Glitch
                       </button>
                     </div>
-                  ))}
+                  </div>
+
+                  <textarea
+                    className="portal-textarea mono-font"
+                    rows={5}
+                    value={stepsToReproduce}
+                    onChange={(e) => setStepsToReproduce(e.target.value)}
+                    placeholder="1. Go to page...&#10;2. Click on button...&#10;3. Observe error message..."
+                    required
+                  />
+                  <span className="portal-hint">
+                    Clear step-by-step numbers allow engineers to replicate the defect in seconds.
+                  </span>
+                </div>
+              </div>
+
+              {/* SECTION 3: CONTEXT & ATTACHMENTS */}
+              <div className={`portal-section ${activeStepTab === 3 ? "tab-active" : ""}`}>
+                <div className="section-legend">
+                  <span className="section-pill">STEP 3</span>
+                  <h3>Diagnostics, Environment & Attachments</h3>
+                </div>
+
+                <div className="portal-grid-2">
+                  {/* Environment */}
+                  <div className="portal-field">
+                    <div className="portal-label-row">
+                      <label className="portal-label">
+                        <span className="label-text">Device & Environment</span>
+                      </label>
+                      <button
+                        type="button"
+                        className="portal-inline-action"
+                        onClick={handleAutoDetectSystem}
+                        title="Auto-detect operating system, browser, and screen size"
+                      >
+                        <i className="fa-solid fa-wand-magic-sparkles"></i> Auto-detect
+                      </button>
+                    </div>
+                    <input
+                      type="text"
+                      className="portal-input"
+                      value={environment}
+                      onChange={(e) => setEnvironment(e.target.value)}
+                      placeholder="e.g. Chrome 122 on macOS 14.5 (1920×1080)"
+                    />
+                    <span className="portal-hint">Browser, OS, device model or screen size.</span>
+                  </div>
+
+                  {/* Reporter Email */}
+                  <div className="portal-field">
+                    <label className="portal-label">
+                      <span className="label-text">Reporter Email (optional)</span>
+                    </label>
+                    <input
+                      type="email"
+                      className="portal-input"
+                      value={reporterEmail}
+                      onChange={(e) => setReporterEmail(e.target.value)}
+                      placeholder="alex@company.com"
+                    />
+                    <span className="portal-hint">Only used if engineering needs triage follow-up.</span>
+                  </div>
+                </div>
+
+                {/* Attachments Dropzone */}
+                <div className="portal-field">
+                  <div className="portal-label-row">
+                    <label className="portal-label">
+                      <span className="label-text">Screenshots & Diagnostic Files</span>
+                    </label>
+                    <span className="portal-char-count">
+                      <i className="fa-solid fa-paperclip"></i> {attachments.length} / 5 files
+                    </span>
+                  </div>
+
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    multiple
+                    accept="image/*,video/*,.pdf,.txt,.log,.json"
+                    style={{ display: "none" }}
+                    onChange={(e) => {
+                      handleFilesSelected(e.target.files);
+                      if (e.target) e.target.value = "";
+                    }}
+                  />
+
+                  <div
+                    className={`portal-dropzone ${isDragging ? "dragging" : ""}`}
+                    onClick={() => fileInputRef.current?.click()}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      setIsDragging(true);
+                    }}
+                    onDragLeave={() => setIsDragging(false)}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      setIsDragging(false);
+                      handleFilesSelected(e.dataTransfer.files);
+                    }}
+                  >
+                    <div className="dropzone-icon">
+                      <i className="fa-solid fa-cloud-arrow-up"></i>
+                    </div>
+                    <div className="dropzone-title">
+                      Drop screenshots or logs here, or <span>browse files</span>
+                    </div>
+                    <div className="dropzone-sub">
+                      Tip: You can also <strong>press Ctrl + V</strong> to paste screenshots directly!
+                    </div>
+                  </div>
+
+                  {attachments.length > 0 && (
+                    <div className="portal-file-list">
+                      {attachments.map((file, idx) => (
+                        <div key={idx} className="portal-file-chip">
+                          {file.type.startsWith("image/") && file.dataUrl ? (
+                            <img src={file.dataUrl} alt={file.name} className="file-chip-thumb" />
+                          ) : (
+                            <div className="file-chip-icon">
+                              <i className="fa-solid fa-file-lines"></i>
+                            </div>
+                          )}
+                          <div className="file-chip-info">
+                            <span className="file-chip-name" title={file.name}>
+                              {file.name}
+                            </span>
+                            <span className="file-chip-size">{formatFileSize(file.size)}</span>
+                          </div>
+                          <button
+                            type="button"
+                            className="file-chip-remove"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleRemoveAttachment(idx);
+                            }}
+                            title="Remove file"
+                          >
+                            <i className="fa-solid fa-xmark"></i>
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Error message */}
+              {errorMsg && (
+                <div className="portal-alert-error" ref={errorRef}>
+                  <i className="fa-solid fa-triangle-exclamation"></i>
+                  <span>{errorMsg}</span>
                 </div>
               )}
-            </div>
+
+              {/* Action Buttons */}
+              <div className="portal-actions">
+                <div className="portal-actions-left">
+                  <span className="shortcut-note">
+                    <i className="fa-solid fa-shield-halved"></i> Secure end-to-end incident submission
+                  </span>
+                </div>
+
+                <div className="portal-actions-right">
+                  <Link to="/" className="portal-btn secondary">
+                    Cancel
+                  </Link>
+
+                  <button className="portal-btn primary" type="submit" disabled={submitting}>
+                    {submitting ? (
+                      <>
+                        <i className="fa-solid fa-circle-notch fa-spin"></i> Submitting Report...
+                      </>
+                    ) : (
+                      <>
+                        <i className="fa-solid fa-paper-plane"></i> Submit Defect Report
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </form>
           </div>
+        )}
+      </main>
 
-          {errorMsg && (
-            <div className="saas-alert-error" ref={errorRef}>
-              <i className="fa-solid fa-circle-exclamation"></i>
-              <span>{errorMsg}</span>
-            </div>
-          )}
-
-          <div className="saas-actions">
-            <Link to="/" className="saas-btn secondary">
-              Cancel
-            </Link>
-
-            <button
-              className="saas-btn primary"
-              type="submit"
-              disabled={submitting}
-            >
-              {submitting ? (
-                <>
-                  <i className="fa-solid fa-circle-notch fa-spin"></i> Submitting...
-                </>
-              ) : (
-                <>
-                  <i className="fa-solid fa-paper-plane"></i> Submit Bug Report
-                </>
-              )}
-            </button>
-          </div>
-        </form>
-      </div>
+      {/* Portal Footer */}
+      <footer className="portal-footer">
+        <div className="portal-footer-inner">
+          <span>Powered by <strong>BugPilot Incident Engine</strong></span>
+          <span className="footer-sep">·</span>
+          <span>Model Context Protocol Enabled</span>
+        </div>
+      </footer>
     </div>
   );
 }
